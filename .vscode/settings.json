@@ -1,0 +1,18 @@
+{
+  "editor.detectIndentation": false,
+  "editor.tabSize": 2,
+  "files.insertFinalNewline": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always",
+    "source.fixAll.stylelint": "always",
+    "editor.action.formatDocument": "always"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "Lua.workspace.userThirdParty": [
+    "/home/jb/.config/Code/User/workspaceStorage/fa6132c98ffd6613895674ac7ec9b233/justarandomgeek.factoriomod-debug/sumneko-3rd"
+  ],
+  "Lua.workspace.checkThirdParty": "ApplyInMemory",
+  "cSpell.words": [
+    "presigner"
+  ]
+}

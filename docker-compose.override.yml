@@ -1,0 +1,16 @@
+# This file is for local development only.
+# It is not used, nor recommended, for production.
+
+services:
+  app:
+    image: undefined
+    restart: 'no'
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./db:/app/db
+
+volumes: {}
