@@ -31,7 +31,7 @@ export class DatabaseConfig {
    * @default 'username'
    * @env DATABASE_USERNAME
    */
-  username = $str('DATABASE_USERNAME', 'username');
+  user = $str('DATABASE_USERNAME', 'username');
 
   /**
    * The password of the database. Not used for SQLite.
