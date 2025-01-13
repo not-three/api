@@ -4,7 +4,6 @@ on:
   push:
     branches: [ "main" ]
     paths-ignore:
-      - ".github/**"
       - ".vscode/**"
       - "README.md"
 
@@ -27,7 +26,6 @@ jobs:
           password: ${{secrets.GITHUB_TOKEN}}
 
       - uses: mr-smithers-excellent/docker-build-push@v6
-        id: docker_build
         with:
           image: api
           tags: nightly,${{ github.sha }}
