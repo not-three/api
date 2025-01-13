@@ -16,7 +16,7 @@ COPY --from=build-stage /app/LICENSE LICENSE
 COPY --from=build-stage /app/docs ./docs
 COPY --from=build-stage /app/node_modules ./node_modules
 
-EXPOSE 3000
+EXPOSE 4000
 ENV NODE_ENV=production
 LABEL org.opencontainers.image.source=https://github.com/not-three/api
 LABEL org.opencontainers.image.title="not-th.re/api"
