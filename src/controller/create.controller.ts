@@ -51,7 +51,11 @@ export class CreateController {
     const ip = getIp(req);
     const limits = this.cfg.get().limits;
 
-    const now = Date.now();
+    if (isNaN(+body.expiresIn))
+      throw new HttpException(
+        'The expiresIn field must be a number',
+        HttpStatus.BAD_REQUEST,
+      );
     if (body.expiresIn < 60)
       throw new HttpException(
         'The note must expire in at least 1 minute',
@@ -84,7 +88,7 @@ export class CreateController {
         content: body.content,
         mime: body.mime,
         self_destruct: body.selfDestruct,
-        expires_at: now + body.expiresIn * 1000,
+        expires_at: Date.now() + body.expiresIn * 1000,
         delete_token: deleteToken,
         ip: ip,
       }),
