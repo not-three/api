@@ -62,6 +62,50 @@ export class MigrationService implements OnApplicationBootstrap {
         ].join(this.breakString),
       });
     },
+    async (knex) => {
+      await knex.schema.alterTable('notes', (table) => {
+        table.bigInteger('expires_at').notNullable().alter();
+        table.bigInteger('created_at').notNullable().alter();
+      });
+      await knex.schema.alterTable('tokens', (table) => {
+        table.bigInteger('created_at').notNullable().alter();
+      });
+      await knex.schema.alterTable('requests', (table) => {
+        table.bigInteger('created_at').notNullable().alter();
+      });
+      await knex.schema.alterTable('bans', (table) => {
+        table.bigInteger('created_at').notNullable().alter();
+      });
+      await knex.schema.alterTable('files', (table) => {
+        table.bigInteger('updated_at').notNullable().alter();
+      });
+      await knex('migrations').insert({
+        id: 2,
+        revert: [
+          knex.schema
+            .alterTable('notes', (table) => {
+              table.integer('expires_at', 32).notNullable().alter();
+              table.integer('created_at', 32).notNullable().alter();
+            })
+            .toString(),
+          knex.schema
+            .alterTable('tokens', (table) => {
+              table.integer('created_at', 32).notNullable().alter();
+            })
+            .toString(),
+          knex.schema
+            .alterTable('requests', (table) => {
+              table.integer('created_at', 32).notNullable().alter();
+            })
+            .toString(),
+          knex.schema
+            .alterTable('bans', (table) => {
+              table.integer('created_at', 32).notNullable().alter();
+            })
+            .toString(),
+        ].join(this.breakString),
+      });
+    },
   ];
 
   async onApplicationBootstrap() {
