@@ -24,7 +24,8 @@ export class BaseConfig {
   idLength = $int('ID_LENGTH', 21);
 
   /**
-   * Child instances do not run migrations. If you have multiple instances running, all but one should be child instances.
+   * Child instances do not run migrations or execute scheduled tasks.
+   * If you have multiple instances running, all but one should be child instances.
    * @default false
    * @env CHILD_INSTANCE
    */

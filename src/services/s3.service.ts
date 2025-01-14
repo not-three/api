@@ -151,11 +151,13 @@ export class S3Service implements OnModuleInit {
   @Cron('30 * * * * *')
   async cleanUp() {
     if (!this.client) return;
+    const cfg = this.cfg.get();
+    if (cfg.childInstance) return;
     this.logger.debug('Running cleanup cron job');
     let aborted = 0;
     let deleted = 0;
     for (const file of await this.db.getUploadFilesLastUpdatedBefore(
-      Date.now() - this.cfg.get().fileTransfer.uploadPartTimeInMinutes * 60_000,
+      Date.now() - cfg.fileTransfer.uploadPartTimeInMinutes * 60_000,
     )) {
       const key = `${file.id}/${file.name}`;
       await this.abortMultipartUpload(key, file.upload_id);

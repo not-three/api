@@ -18,38 +18,38 @@ export class MigrationService implements OnApplicationBootstrap {
       await knex.schema.createTable('notes', (table) => {
         table.string('id', 32).primary().notNullable();
         table.text('content').notNullable();
-        table.string('ip', 15).notNullable();
-        table.integer('created_at', 32).notNullable();
-        table.integer('expires_at', 32).notNullable();
+        table.string('ip', 39).notNullable();
+        table.bigint('created_at').notNullable();
+        table.bigint('expires_at').notNullable();
         table.boolean('self_destruct').notNullable();
         table.string('delete_token', 8).nullable();
         table.string('mime', 16).nullable();
       });
       await knex.schema.createTable('tokens', (table) => {
         table.string('id', 32).primary().notNullable();
-        table.string('ip', 15).notNullable();
+        table.string('ip', 39).notNullable();
         table.integer('used', 32).notNullable();
-        table.integer('created_at', 32).notNullable();
+        table.bigint('created_at').notNullable();
       });
       await knex.schema.createTable('requests', (table) => {
         table.string('id', 32).primary().notNullable();
-        table.string('ip', 15).notNullable();
+        table.string('ip', 39).notNullable();
         table.boolean('failed').notNullable();
-        table.integer('created_at', 32).notNullable();
+        table.bigint('created_at').notNullable();
       });
       await knex.schema.createTable('bans', (table) => {
-        table.string('ip', 15).primary().notNullable();
-        table.integer('created_at', 32).notNullable();
+        table.string('ip', 39).primary().notNullable();
+        table.bigint('created_at').notNullable();
       });
       await knex.schema.createTable('files', (table) => {
         table.string('id', 32).primary().notNullable();
         table.string('name', 64).notNullable();
-        table.string('ip', 15).notNullable();
+        table.string('ip', 39).notNullable();
         table.integer('part', 16).notNullable();
         table.string('upload_id', 128).nullable();
-        table.integer('created_at', 32).notNullable();
-        table.integer('updated_at', 32).notNullable();
-        table.integer('expires_at', 32).notNullable();
+        table.bigint('created_at').notNullable();
+        table.bigint('updated_at').notNullable();
+        table.bigint('expires_at').notNullable();
       });
       await knex('migrations').insert({
         id: 1,
@@ -59,50 +59,6 @@ export class MigrationService implements OnApplicationBootstrap {
           knex.schema.dropTable('requests').toString(),
           knex.schema.dropTable('bans').toString(),
           knex.schema.dropTable('files').toString(),
-        ].join(this.breakString),
-      });
-    },
-    async (knex) => {
-      await knex.schema.alterTable('notes', (table) => {
-        table.bigInteger('expires_at').notNullable().alter();
-        table.bigInteger('created_at').notNullable().alter();
-      });
-      await knex.schema.alterTable('tokens', (table) => {
-        table.bigInteger('created_at').notNullable().alter();
-      });
-      await knex.schema.alterTable('requests', (table) => {
-        table.bigInteger('created_at').notNullable().alter();
-      });
-      await knex.schema.alterTable('bans', (table) => {
-        table.bigInteger('created_at').notNullable().alter();
-      });
-      await knex.schema.alterTable('files', (table) => {
-        table.bigInteger('updated_at').notNullable().alter();
-      });
-      await knex('migrations').insert({
-        id: 2,
-        revert: [
-          knex.schema
-            .alterTable('notes', (table) => {
-              table.integer('expires_at', 32).notNullable().alter();
-              table.integer('created_at', 32).notNullable().alter();
-            })
-            .toString(),
-          knex.schema
-            .alterTable('tokens', (table) => {
-              table.integer('created_at', 32).notNullable().alter();
-            })
-            .toString(),
-          knex.schema
-            .alterTable('requests', (table) => {
-              table.integer('created_at', 32).notNullable().alter();
-            })
-            .toString(),
-          knex.schema
-            .alterTable('bans', (table) => {
-              table.integer('created_at', 32).notNullable().alter();
-            })
-            .toString(),
         ].join(this.breakString),
       });
     },
@@ -122,8 +78,9 @@ export class MigrationService implements OnApplicationBootstrap {
         table.text('revert').notNullable();
       });
     }
-    let level = (await knex('migrations').count('id as count').first())
-      .count as number;
+    let level = Number(
+      (await knex('migrations').count('id as count').first()).count,
+    );
     this.logger.log(`Migrations level: ${level} / ${this.migrations.length}`);
 
     if (level > this.migrations.length) {

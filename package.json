@@ -16,7 +16,12 @@
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "build": "npm run build:nest && npm run build:docs",
     "build:nest": "nest build",
-    "build:docs": "typedoc"
+    "build:docs": "typedoc",
+    "pg:dev": "pnpm pg:reset && pnpm pg:build && pnpm pg:start",
+    "pg:base": "docker compose -f docker-compose.db.yml -f docker-compose.override.yml",
+    "pg:build": "pnpm pg:base build",
+    "pg:start": "pnpm pg:base up",
+    "pg:reset": "pnpm pg:base down --volumes"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.1",

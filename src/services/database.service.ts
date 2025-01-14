@@ -102,7 +102,13 @@ export class DatabaseService
   getNote(id: string): Promise<Note | null> {
     return this.getFromCache(`note-${id}`, async () => {
       const res = await this.knex('notes').where('id', id).first();
-      return res || null;
+      return res
+        ? {
+            ...res,
+            created_at: Number(res.created_at),
+            expires_at: Number(res.expires_at),
+          }
+        : null;
     });
   }
 
@@ -129,10 +135,21 @@ export class DatabaseService
   }
 
   async getRequests(ip: string): Promise<{ total: number; failed: number }> {
-    const res = await this.knex('requests').where('ip', ip).select('failed');
+    const res = await Promise.all([
+      this.knex('requests')
+        .where('ip', ip)
+        .where('failed', false)
+        .count('id as count')
+        .first(),
+      this.knex('requests')
+        .where('ip', ip)
+        .where('failed', true)
+        .count('id as count')
+        .first(),
+    ]).then((r) => r.map((r) => r.count as number));
     return {
-      total: res.length,
-      failed: res.filter((r) => r.failed).length,
+      total: res[0] + res[1],
+      failed: res[1],
     };
   }
 
@@ -157,8 +174,13 @@ export class DatabaseService
   getFile(id: string): Promise<File | null> {
     return this.getFromCache(`file-${id}`, async () => {
       const res = await this.knex('files').where('id', id).first();
-      if (res) return res as File;
-      return null;
+      if (!res) return null;
+      return {
+        ...res,
+        created_at: Number(res.created_at),
+        updated_at: Number(res.updated_at),
+        expires_at: Number(res.expires_at),
+      } as File;
     });
   }
 
@@ -176,8 +198,9 @@ export class DatabaseService
   }
 
   async getTotalFiles(): Promise<number> {
-    return (await this.knex('files').count('id as count').first())
-      .count as number;
+    return Number(
+      (await this.knex('files').count('id as count').first()).count,
+    );
   }
 
   async deleteFile(id: string): Promise<void> {
@@ -206,9 +229,10 @@ export class DatabaseService
   @Cron('* * * * *')
   async cleanUp() {
     if (!this.ready) return;
+    const cfg = this.config.get();
+    if (cfg.childInstance) return;
     this.logger.debug('Running cleanup cron job');
     const timestamp = Date.now();
-    const cfg = this.config.get();
     const deletedNotes = await this.knex('notes')
       .where('expires_at', '<', timestamp)
       .del();
@@ -290,7 +314,7 @@ export class DatabaseService
             .where('upload_id', null)
             .count('id as count')
             .first(),
-        ].map((p) => p.then((r) => r.count as number)),
+        ].map((p) => p.then((r) => Number(r.count))),
       );
       return {
         time: Math.round(Date.now() / 1000),

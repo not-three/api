@@ -4,7 +4,7 @@
 services:
   app:
     image: undefined
-    restart: 'no'
+    restart: on-failure
     build:
       context: .
       dockerfile: Dockerfile

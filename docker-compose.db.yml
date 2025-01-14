@@ -1,0 +1,35 @@
+# Simple example of an !3 api deployment
+# with a postgres database using docker compose
+# Can be run with `docker compose -f docker-compose.db.yml up`
+# Or with `docker compose -f docker-compose.db.yml -f docker-compose.override.yml up`
+# We still recommend checking out the more advanced examples in the main repository
+# https://github.com/not-three/main#deployment
+
+x-restart: &restart
+  restart: 'unless-stopped'
+
+services:
+  db:
+    image: postgres:14.5
+    <<: *restart
+    environment:
+      POSTGRES_PASSWORD: db
+      POSTGRES_USER: db
+      POSTGRES_DB: db
+    volumes:
+      - pg:/var/lib/postgresql/data
+  
+  app:
+    image: ghcr.io/not-three/api:nightly
+    <<: *restart
+    ports: [ 4000:4000 ]
+    depends_on: [ db ]
+    environment:
+      DATABASE_MODE: pg
+      DATABASE_HOST: db
+      DATABASE_USERNAME: db
+      DATABASE_PASSWORD: db
+      DATABASE_NAME: db
+
+volumes:
+  pg:
