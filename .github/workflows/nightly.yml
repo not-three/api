@@ -36,6 +36,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Documentation
+        run: pnpm build:docs
+
       - name: Publish documentation
         uses: peaceiris/actions-gh-pages@v4
         with:
