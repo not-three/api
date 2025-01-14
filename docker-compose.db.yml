@@ -25,6 +25,7 @@ services:
     ports: [ 4000:4000 ]
     depends_on: [ db ]
     environment:
+      CORS_ENABLED: true
       DATABASE_MODE: pg
       DATABASE_HOST: db
       DATABASE_USERNAME: db

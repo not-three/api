@@ -17,8 +17,8 @@ import { Note, NoteInsert } from 'src/types/db/Note';
 import { FileInsert, File } from 'src/types/db/File';
 import { StatsResponse } from 'src/types/api/StatsResponse';
 
-import type pRetry from 'p-retry';
 import knex from 'knex';
+import { nanoId, pRetry } from 'src/etc/esm-fix';
 
 @Injectable()
 export class DatabaseService
@@ -27,7 +27,6 @@ export class DatabaseService
   private readonly logger = new Logger(DatabaseService.name);
   private knex: knex.Knex;
   private nanoId: (size: number) => string;
-  private pRetry: typeof pRetry;
   private ready = false;
 
   constructor(
@@ -44,10 +43,6 @@ export class DatabaseService
   }
 
   async onModuleInit() {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    this.nanoId = require('fix-esm').require('nanoid').nanoid;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    this.pRetry = require('fix-esm').require('p-retry').default;
     try {
       const cfg = this.config.get().database;
       if (cfg.mode === 'sqlite3') {
@@ -73,7 +68,7 @@ export class DatabaseService
   }
 
   generateId(length?: number) {
-    return this.nanoId(length || this.config.get().idLength);
+    return nanoId(length || this.config.get().idLength);
   }
 
   private async getFromCache<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -85,7 +80,7 @@ export class DatabaseService
   }
 
   private async insert(table: string, data: any): Promise<string> {
-    return await this.pRetry(
+    return await pRetry(
       async () => {
         const id = this.generateId();
         await this.knex(table).insert({

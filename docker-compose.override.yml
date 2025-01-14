@@ -9,7 +9,8 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - NODE_ENV=development
+      CORS_ENABLED: true
+      NODE_ENV: development
     volumes:
       - ./db:/app/db
 

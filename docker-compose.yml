@@ -9,6 +9,8 @@ services:
       - 4000:4000
     volumes:
       - db:/data/db
+    environment:
+      CORS_ENABLED: true
 
 volumes:
   db:

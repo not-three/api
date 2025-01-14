@@ -1,9 +1,15 @@
-import { applyDecorators, UseFilters, UseGuards } from '@nestjs/common';
+import {
+  applyDecorators,
+  UseFilters,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ErrorDecorator } from './error.decorator';
 import { ExceptionsFilter } from '../etc/exception.filter';
 import { BanGuard } from '../guards/ban.guard';
 import { RequestGuard } from '../guards/request.guard';
 import { LogGuard } from '../guards/log.guard';
+import { CorsInterceptor } from 'src/etc/cors.interceptor';
 
 export function GlobalDecorator() {
   return applyDecorators(
@@ -15,5 +21,6 @@ export function GlobalDecorator() {
     ErrorDecorator(500, 'An internal server error occurred'),
     UseFilters(ExceptionsFilter),
     UseGuards(LogGuard, BanGuard, RequestGuard),
+    UseInterceptors(CorsInterceptor),
   );
 }
