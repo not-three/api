@@ -35,3 +35,12 @@ jobs:
           addLatest: false
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish documentation
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          destination_dir: nightly
+          publish_branch: docs
+          force_orphan: true
