@@ -9,6 +9,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 FROM node:20-alpine
+RUN apk add --no-cache curl
 WORKDIR /app
 
 COPY --from=build-stage /app/dist .
