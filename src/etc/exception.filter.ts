@@ -23,7 +23,9 @@ export class ExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const isHttpException = exception instanceof HttpException;
 
-    if (!isHttpException) this.logger.error(exception);
+    if (!isHttpException && exception instanceof Error)
+      this.logger.error(exception.stack);
+    else if (!isHttpException) this.logger.error(exception);
     if (!isHttpException || exception.getStatus() !== HttpStatus.I_AM_A_TEAPOT)
       this.db
         .createRequest(ctx.getRequest().ip, true)
