@@ -84,7 +84,7 @@ export class MigrationService implements OnApplicationBootstrap {
     this.logger.log(`Migrations level: ${level} / ${this.migrations.length}`);
 
     if (level > this.migrations.length) {
-      if (!cfg.allowRevertingMigrations) {
+      if (!cfg.database.allowRevertingMigrations) {
         this.logger.fatal(
           'The database seems to be of a newer version than the application and reverting migrations is disabled',
         );

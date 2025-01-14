@@ -1,4 +1,4 @@
-import { $int, $oneOf, $str } from './Helper';
+import { $bool, $int, $oneOf, $str } from './Helper';
 
 export class DatabaseConfig {
   /** @hidden */
@@ -15,7 +15,7 @@ export class DatabaseConfig {
   /**
    * The host of the database. Not used for SQLite.
    * @default 'localhost'
-   * @env `DATABASE_HOST`
+   * @env DATABASE_HOST
    */
   host = $str('DATABASE_HOST', 'localhost');
 
@@ -53,4 +53,12 @@ export class DatabaseConfig {
    * @env DATABASE_NAME
    */
   database = $str('DATABASE_NAME', 'database');
+
+  /**
+   * In the rare case that you need to downgrade the database, set this temporarily to true.
+   * Be aware that this can lead to data loss. Make sure to have backups.
+   * @default false
+   * @env ALLOW_REVERTING_MIGRATIONS
+   */
+  allowRevertingMigrations = $bool('ALLOW_REVERTING_MIGRATIONS', false);
 }

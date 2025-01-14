@@ -6,3 +6,5 @@ export * from './Base';
 export * from './Database';
 export * from './FileTransfer';
 export * from './Limits';
+export * from './GetIp';
+export * from './Cors';
