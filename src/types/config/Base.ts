@@ -45,13 +45,13 @@ export class BaseConfig {
   /**
    * The log level of the app.
    * @default 'info'
-   * @values 'fatal', 'error', 'warn', 'info', 'debug', 'trace'
+   * @values 'fatal', 'error', 'warn', 'log', 'debug', 'trace'
    * @env LOG_LEVEL
    */
   logLevel = $oneOf(
     'LOG_LEVEL',
-    ['fatal', 'error', 'warn', 'info', 'debug', 'trace'],
-    'info',
+    ['fatal', 'error', 'warn', 'log', 'debug', 'trace'],
+    'log',
   );
 
   /**
