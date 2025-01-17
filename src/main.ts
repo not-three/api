@@ -34,7 +34,7 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '10mb' });
   app.useBodyParser('text', { limit: '10mb' });
 
-  if (process.env.DISABLE_SWAGGER !== 'true') {
+  if (!cfg.swaggerDisabled) {
     const config = new DocumentBuilder()
       .setTitle('not-th.re')
       .setDescription(
@@ -46,7 +46,7 @@ async function bootstrap() {
     SwaggerModule.setup('swagger', app, documentFactory);
   }
 
-  await app.listen(process.env.PORT ?? 4000);
+  await app.listen(cfg.port);
 
   process.on('SIGINT', () => app.close().then(() => process.exit(0)));
 }
