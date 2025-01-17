@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BaseConfig } from 'src/types/config/Base';
+import { BaseConfig } from 'src/config/Base';
 import * as dotenv from 'dotenv';
 
 @Injectable()

@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { GetIpConfig } from 'src/types/config';
+import { GetIpConfig } from 'src/config';
 import { HttpException } from '@nestjs/common';
 import { ip, ipRegex } from './esm-fix';
 

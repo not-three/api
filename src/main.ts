@@ -3,7 +3,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { version } from '../package.json';
-import { BaseConfig } from './types/config';
+import { BaseConfig } from './config';
 
 process.on('SIGINT', () => {
   setTimeout(() => {

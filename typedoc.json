@@ -1,5 +1,5 @@
 {
-  "entryPoints": ["src/types/config/index.ts"],
+  "entryPoints": ["src/config/index.ts"],
   "out": "docs",
   "blockTags": ["@env", "@values", "@see", "@default"],
   "disableGit": true,
