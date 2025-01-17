@@ -290,6 +290,7 @@ export class DatabaseService
         notExpiredFailedRequests,
         currentUploadingFiles,
         currentFiles,
+        bannedIps,
       ] = await Promise.all(
         [
           this.knex('notes').count('id as count').first(),
@@ -309,6 +310,7 @@ export class DatabaseService
             .where('upload_id', null)
             .count('id as count')
             .first(),
+          this.knex('bans').count('id as count').first(),
         ].map((p) => p.then((r) => Number(r.count))),
       );
       return {
@@ -318,6 +320,7 @@ export class DatabaseService
         notExpiredFailedRequests,
         currentUploadingFiles,
         currentFiles,
+        bannedIps,
       };
     });
   }

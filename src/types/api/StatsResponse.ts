@@ -38,4 +38,10 @@ export class StatsResponse {
     description: 'The amount of files that are not currently being uploaded',
   })
   currentUploadingFiles: number;
+
+  @ApiProperty({
+    example: 0,
+    description: 'The amount how many ip addresses are currently banned',
+  })
+  bannedIps: number;
 }
