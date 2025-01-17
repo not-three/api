@@ -23,15 +23,15 @@ export class CorsConfig {
    * @default 'GET,HEAD,PUT,PATCH,POST,DELETE'
    * @env CORS_METHODS
    */
-  methods = $str('CORS_METHODS', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+  methods = $str('CORS_METHODS', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
 
   /**
    * The headers to allow.
-   * @default 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+   * @default 'Origin,X-Requested-With,Content-Type,Accept,Authorization'
    * @env CORS_HEADERS
    */
   headers = $str(
     'CORS_HEADERS',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+    'Origin,X-Requested-With,Content-Type,Accept,Authorization',
   );
 }

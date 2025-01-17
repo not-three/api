@@ -24,6 +24,13 @@ async function bootstrap() {
     logger: logLevel.slice(0, currentLogLevel + 1) as any,
   });
 
+  if (cfg.cors.enabled)
+    app.enableCors({
+      origin: cfg.cors.origin,
+      methods: cfg.cors.methods.split(',').map((m) => m.trim()),
+      allowedHeaders: cfg.cors.headers.split(',').map((h) => h.trim()),
+    });
+
   app.useBodyParser('json', { limit: '10mb' });
   app.useBodyParser('text', { limit: '10mb' });
 
