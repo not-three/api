@@ -5,6 +5,17 @@ import { LimitsConfig } from './Limits';
 import { GetIpConfig } from './GetIp';
 import { CorsConfig } from './Cors';
 
+/** @hidden */
+export const LOG_LEVEL = [
+  'fatal',
+  'error',
+  'warn',
+  'log',
+  'debug',
+  'verbose',
+  'trace',
+];
+
 export class BaseConfig {
   /** @hidden */
   constructor() {}
@@ -48,11 +59,7 @@ export class BaseConfig {
    * @values 'fatal', 'error', 'warn', 'log', 'debug', 'trace'
    * @env LOG_LEVEL
    */
-  logLevel = $oneOf(
-    'LOG_LEVEL',
-    ['fatal', 'error', 'warn', 'log', 'debug', 'trace'],
-    'log',
-  );
+  logLevel = $oneOf('LOG_LEVEL', LOG_LEVEL, 'log');
 
   /**
    * The port the app should listen on.

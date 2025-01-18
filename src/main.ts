@@ -3,7 +3,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { version } from '../package.json';
-import { BaseConfig } from './config';
+import { BaseConfig, LOG_LEVEL } from './config';
 
 process.on('SIGINT', () => {
   setTimeout(() => {
@@ -17,11 +17,10 @@ process.on('SIGTERM', () => {
 
 async function bootstrap() {
   const cfg = new BaseConfig();
-  const logLevel = ['fatal', 'error', 'warn', 'log', 'debug', 'trace'];
-  const currentLogLevel = logLevel.indexOf(cfg.logLevel);
+  const currentLogLevel = LOG_LEVEL.indexOf(cfg.logLevel);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
-    logger: logLevel.slice(0, currentLogLevel + 1) as any,
+    logger: LOG_LEVEL.slice(0, currentLogLevel + 1) as any,
   });
 
   if (cfg.cors.enabled)
