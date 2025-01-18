@@ -28,7 +28,7 @@ export class StatsController {
   @ApiResponse({ type: InfoResponse, status: HttpStatus.OK })
   @GlobalDecorator()
   async getInfo(@Req() req: Request): Promise<InfoResponse> {
-    const used = await this.db.getTokens(getIp(req));
+    const used = await this.db.getTokens(await getIp(req));
     const { limits, fileTransfer } = this.cfg.get();
     return {
       version: version,

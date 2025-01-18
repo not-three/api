@@ -48,7 +48,7 @@ export class CreateController {
     @Body() body: CreateRequest,
     @Req() req: Request,
   ): Promise<CreateResponse> {
-    const ip = getIp(req);
+    const ip = await getIp(req);
     const limits = this.cfg.get().limits;
 
     if (isNaN(+body.expiresIn))
@@ -112,7 +112,7 @@ export class CreateController {
     @RawBody() body: Buffer,
     @Req() req: RawBodyRequest<Request>,
   ): Promise<string> {
-    const ip = getIp(req);
+    const ip = await getIp(req);
     const limits = this.cfg.get().limits;
 
     let cost = Buffer.byteLength(body, 'utf8');

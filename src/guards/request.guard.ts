@@ -20,7 +20,7 @@ export class RequestGuard implements CanActivate {
     const limits = this.cfg.get().limits;
     if (limits.disabled) return true;
     const request = context.switchToHttp().getRequest();
-    const ip = getIp(request);
+    const ip = await getIp(request);
     const count = await this.db.getRequests(ip);
     const ban = count.failed >= limits.banAfterFailedRequests;
     if (ban) await this.db.ban(ip);

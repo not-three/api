@@ -21,7 +21,7 @@ export class BanGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (this.cfg.get().limits.disabled) return true;
     const request = context.switchToHttp().getRequest();
-    const ip = getIp(request);
+    const ip = await getIp(request);
     const banned = await this.db.isBanned(ip);
     if (banned) {
       this.logger.warn(`Blocked request from ${ip} due to ban`);

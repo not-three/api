@@ -96,7 +96,7 @@ export class FetchController {
       throw new HttpException('The key is too long', HttpStatus.BAD_REQUEST);
     const note = await this.db.getNote(id);
     await this.db.createToken(
-      getIp(req),
+      await getIp(req),
       Buffer.byteLength(note.content, 'utf8'),
     );
     return this.crypto.decrypt(note.content, key);

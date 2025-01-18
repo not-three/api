@@ -74,7 +74,7 @@ export class FilesController {
         HttpStatus.BAD_REQUEST,
       );
 
-    const ip = getIp(req);
+    const ip = await getIp(req);
     const { fileTransfer } = this.cfg.get();
     const [total, files] = await Promise.all([
       this.db.getTotalFiles(),
@@ -152,7 +152,7 @@ export class FilesController {
         'The file is already uploaded, no more parts can be uploaded',
         HttpStatus.CONFLICT,
       );
-    const ip = getIp(req);
+    const ip = await getIp(req);
     if (file.ip !== ip)
       throw new HttpException(
         'You are not authorized to upload this file, only the ip that started the upload can',
@@ -207,7 +207,7 @@ export class FilesController {
         'The file is already uploaded, no more parts can be uploaded',
         HttpStatus.CONFLICT,
       );
-    const ip = getIp(req);
+    const ip = await getIp(req);
     if (file.ip !== ip)
       throw new HttpException(
         'You are not authorized to upload this file, only the ip that started the upload can',
@@ -266,7 +266,7 @@ export class FilesController {
     const file = await this.db.getFile(id);
     if (!file)
       throw new HttpException('The file was not found', HttpStatus.NOT_FOUND);
-    const ip = getIp(req);
+    const ip = await getIp(req);
     if (file.ip !== ip)
       throw new HttpException(
         'You are not authorized to delete this file, only the ip that uploaded it can',
@@ -288,7 +288,7 @@ export class FilesController {
   @DefaultDecorator(false)
   async listFiles(@Req() req: Request): Promise<FileListResponse> {
     return {
-      files: (await this.db.getFiles(getIp(req))).map((file) => ({
+      files: (await this.db.getFiles(await getIp(req))).map((file) => ({
         name: file.name,
         id: file.id,
         expiresAt: file.expires_at,

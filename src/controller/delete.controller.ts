@@ -39,7 +39,7 @@ export class DeleteController {
     @Res() res: Response,
     @Param('id') id: string,
   ): Promise<Response> {
-    const ip = getIp(req);
+    const ip = await getIp(req);
     const note = await this.db.getNote(id);
     if (!note)
       throw new HttpException('The note was not found', HttpStatus.NOT_FOUND);

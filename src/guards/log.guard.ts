@@ -16,7 +16,7 @@ export class LogGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     this.logger.log(
       [
-        `Request from ${getIp(request)}`,
+        `Request from ${await getIp(request)}`,
         ...(request.headers['user-agent']
           ? [`[${request.headers['user-agent']}]`]
           : []),

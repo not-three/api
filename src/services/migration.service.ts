@@ -110,11 +110,15 @@ export class MigrationService implements OnApplicationBootstrap {
       return;
     }
 
-    while (level < this.migrations.length) {
-      this.logger.log(`Running migration ${level + 1}`);
-      await knex.transaction(this.migrations[level]);
-      level++;
-      this.logger.log(`Migrations level: ${level} / ${this.migrations.length}`);
+    if (level < this.migrations.length) {
+      while (level < this.migrations.length) {
+        this.logger.log(`Running migration ${level + 1}`);
+        await knex.transaction(this.migrations[level]);
+        level++;
+      }
+      this.logger.log(
+        `Migrated successfully to the latest version (level ${level})`,
+      );
     }
   }
 }
