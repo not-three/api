@@ -109,17 +109,17 @@ export async function getIp(req: Request): Promise<string> {
 
   if (!cfg.behindProxy) return validateIp(clientIp, cfg, req);
 
-  const proxyIp = cfg.proxyHeader
+  clientIp = cfg.proxyHeader
     ? headers[cfg.proxyHeader.toLowerCase()]
     : clientIp;
-  logger.debug(`Proxy IP: ${proxyIp}`);
+  logger.debug(`Proxy IP: ${clientIp}`);
 
   const trustList = await getTrustedProxies(cfg);
-  if (!isTrusted(proxyIp, trustList)) return validateIp(clientIp, cfg, req);
+  if (!isTrusted(clientIp, trustList)) return validateIp(clientIp, cfg, req);
   logger.debug('Proxy IP is trusted');
 
   const forwarded = headers[cfg.ipHeader.toLowerCase()];
-  if (!forwarded) return validateIp(proxyIp, cfg, req);
+  if (!forwarded) return validateIp(clientIp, cfg, req);
   clientIp = forwarded.split(',')[0].trim();
   logger.debug(`Forwarded IP: ${clientIp}`);
   return validateIp(clientIp, cfg, req);
