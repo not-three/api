@@ -33,6 +33,8 @@ export class GetIpConfig {
 
   /**
    * Trust only the IP header if the request originates from one of the following urls.
+   * The urls should return a list of ip addresses separated by a newline.
+   * If set the `trustedProxies` option will be ignored.
    * @example 'https://www.cloudflare.com/ips-v6,https://www.cloudflare.com/ips-v4'
    * @default ''
    * @env TRUSTED_PROXIES_URLS
@@ -69,5 +71,5 @@ export class GetIpConfig {
    * @default 8
    * @env STRIP_IPV6_ADDRESS
    */
-  stripIpv6Address = $int('STRIP_IPV6_ADDRESS', 64);
+  stripIpv6Address = $int('STRIP_IPV6_ADDRESS', 8);
 }
