@@ -310,7 +310,7 @@ export class DatabaseService
             .where('upload_id', null)
             .count('id as count')
             .first(),
-          this.knex('bans').count('id as count').first(),
+          this.knex('bans').count('ip as count').first(),
         ].map((p) => p.then((r) => Number(r.count))),
       );
       return {
