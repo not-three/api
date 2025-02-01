@@ -8,11 +8,16 @@
     "editor.action.formatDocument": "always"
   },
   "typescript.tsdk": "node_modules/typescript/lib",
-  "Lua.workspace.userThirdParty": [
-    "/home/jb/.config/Code/User/workspaceStorage/fa6132c98ffd6613895674ac7ec9b233/justarandomgeek.factoriomod-debug/sumneko-3rd"
-  ],
-  "Lua.workspace.checkThirdParty": "ApplyInMemory",
+  "files.exclude": {
+    "**/.pnpm-store": true
+  },
   "cSpell.words": [
-    "presigner"
+    "bitnami",
+    "healthcheck",
+    "lando",
+    "lndo",
+    "pgadmin",
+    "pgpass",
+    "scolastico"
   ]
 }

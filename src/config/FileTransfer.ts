@@ -26,6 +26,14 @@ export class FileTransferConfig {
   s3Endpoint = $str('FILE_TRANSFER_S3_ENDPOINT', 'http://localhost:9000');
 
   /**
+   * The public endpoint which should be reachable by the client.
+   * If not set, the `s3Endpoint` will be used.
+   * @default ''
+   * @env FILE_TRANSFER_S3_PUBLIC_ENDPOINT
+   */
+  s3PublicEndpoint = $str('FILE_TRANSFER_S3_PUBLIC_ENDPOINT', '');
+
+  /**
    * The region of the S3-compatible storage.
    * @default 'us-east-1'
    * @env FILE_TRANSFER_S3_REGION
@@ -100,6 +108,13 @@ export class FileTransferConfig {
     'FILE_TRANSFER_S3_SECRET_ACCESS_KEY',
     'secretAccessKey',
   );
+
+  /**
+   * Whether to force path style URLs.
+   * @default false
+   * @env FILE_TRANSFER_S3_FORCE_PATH_STYLE
+   */
+  s3ForcePathStyle = $bool('FILE_TRANSFER_S3_FORCE_PATH_STYLE', false);
 
   /**
    * The time in minutes after which a file is deleted.

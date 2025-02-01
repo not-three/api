@@ -1,5 +1,18 @@
-import { Controller, Get, HttpStatus, Req, Res } from '@nestjs/common';
-import { ApiExcludeEndpoint, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
+import {
+  ApiExcludeEndpoint,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { version } from '../../package.json';
 import { InfoResponse } from 'src/types/api/InfoResponse';
@@ -26,24 +39,32 @@ export class StatsController {
 
   @Get('info')
   @ApiResponse({ type: InfoResponse, status: HttpStatus.OK })
-  @GlobalDecorator()
+  @GlobalDecorator(true)
   async getInfo(@Req() req: Request): Promise<InfoResponse> {
     const used = await this.db.getTokens(await getIp(req));
-    const { limits, fileTransfer } = this.cfg.get();
+    const { limits, fileTransfer, instancePassword } = this.cfg.get();
     return {
       version: version,
       availableTokens: limits.maxTokensPerIp - used,
       maxStorageTimeDays: limits.maxStorageTimeDays,
       fileTransferEnabled: fileTransfer.enabled,
       fileTransferMaxSize: fileTransfer.maxSizeInMB,
+      privateMode: !!instancePassword,
     };
   }
 
   @Get('stats')
+  @ApiQuery({ name: 'password', required: false })
   @ApiResponse({ type: StatsResponse, status: HttpStatus.OK })
-  @ErrorDecorator(HttpStatus.FORBIDDEN, 'The stats are disabled')
+  @ErrorDecorator(HttpStatus.FORBIDDEN, 'The provided password is incorrect')
   @GlobalDecorator()
-  getStats(): Promise<StatsResponse> {
+  getStats(@Query('password') password: string): Promise<StatsResponse> {
+    const { statsPassword } = this.cfg.get();
+    if (statsPassword && password !== statsPassword)
+      throw new HttpException(
+        'The provided password is incorrect',
+        HttpStatus.FORBIDDEN,
+      );
     return this.db.getStats();
   }
 }

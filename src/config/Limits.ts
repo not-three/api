@@ -43,10 +43,13 @@ export class LimitsConfig {
 
   /**
    * The maximum amount of requests per IP address per minute.
-   * @default 90
+   * @default 300
    * @env LIMITS_MAX_REQUESTS_PER_IP_PER_MINUTE
    */
-  maxRequestsPerIpPerMinute = $int('LIMITS_MAX_REQUESTS_PER_IP_PER_MINUTE', 90);
+  maxRequestsPerIpPerMinute = $int(
+    'LIMITS_MAX_REQUESTS_PER_IP_PER_MINUTE',
+    300,
+  );
 
   /**
    * The multiplier for the amount of tokens a decryption request costs.

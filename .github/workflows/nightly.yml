@@ -57,4 +57,3 @@ jobs:
           publish_dir: ./docs
           destination_dir: nightly
           publish_branch: docs
-          force_orphan: true

@@ -39,7 +39,7 @@ function DefaultDecorator(json: boolean, description?: string) {
       status: HttpStatus.OK,
     }),
     ErrorDecorator(HttpStatus.NOT_FOUND, 'The note was not found'),
-    GlobalDecorator(),
+    GlobalDecorator(true),
   );
 }
 

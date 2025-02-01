@@ -110,7 +110,7 @@ export async function getIp(req: Request): Promise<string> {
   if (!cfg.behindProxy) return validateIp(clientIp, cfg, req);
 
   clientIp = cfg.proxyHeader
-    ? headers[cfg.proxyHeader.toLowerCase()]
+    ? (headers[cfg.proxyHeader.toLowerCase()] ?? clientIp)
     : clientIp;
   logger.debug(`Proxy IP: ${clientIp}`);
 

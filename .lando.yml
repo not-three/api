@@ -1,0 +1,138 @@
+name: not-three-api
+
+x-default-user: &default-user admin@example.com
+
+services:
+  api:
+    type: node:20
+    port: 4000
+    globals:
+      pnpm: latest
+    build:
+      - pnpm install
+    command: pnpm dev
+    overrides:
+      depends_on:
+        db:
+          condition: service_healthy
+      environment:
+        BEHIND_PROXY: true
+        CORS_ENABLED: true
+        LIMITS_DISABLED: true
+        DATABASE_MODE: pg
+        DATABASE_HOST: db
+        DATABASE_USERNAME: *default-user
+        DATABASE_PASSWORD: *default-user
+        DATABASE_NAME: db
+        FILE_TRANSFER_ENABLED: true
+        FILE_TRANSFER_S3_ENDPOINT: http://minio:9000
+        FILE_TRANSFER_S3_PUBLIC_ENDPOINT: http://not-three-minio-public.local.scolastico.me
+        FILE_TRANSFER_S3_REGION: us-east-1
+        FILE_TRANSFER_S3_BUCKET: files
+        FILE_TRANSFER_S3_ACCESS_KEY_ID: minio-storage
+        FILE_TRANSFER_S3_SECRET_ACCESS_KEY: minio-storage
+        FILE_TRANSFER_GLOBAL_MAXIMUM_SIMULTANEOUS_FILES: 1000
+        FILE_TRANSFER_SIMULTANEOUS_FILES_PER_IP: 1000
+        FILE_TRANSFER_S3_FORCE_PATH_STYLE: true
+    scanner:
+      okCodes: [302]
+
+  db:
+    type: lando
+    app_mount: false
+    api: 3
+    services:
+      image: postgres:14.5
+      command: docker-entrypoint.sh postgres
+      environment:
+        POSTGRES_PASSWORD: *default-user
+        POSTGRES_USER: *default-user
+        POSTGRES_DB: db
+      volumes:
+        - pg:/var/lib/postgresql/data
+      healthcheck:
+        test: pg_isready -U db
+        interval: 10s
+        retries: 5
+        timeout: 5s
+    volumes:
+      pg: {}
+
+  minio:
+    type: lando
+    app_mount: false
+    api: 3
+    services:
+      image: bitnami/minio
+      command: /opt/bitnami/scripts/minio/entrypoint.sh /opt/bitnami/scripts/minio/run.sh
+      environment:
+        MINIO_ROOT_USER: *default-user
+        MINIO_ROOT_PASSWORD: *default-user
+        MINIO_DEFAULT_BUCKETS: files
+      ports: [9000,9001]
+      volumes:
+        - minio_data:/bitnami/minio/data
+    moreHttpPorts: [9000,9001]
+    run_as_root:
+      - mc admin accesskey create local admin@example.com --access-key minio-storage --secret-key minio-storage
+    volumes: 
+      minio_data: {}
+    scanner:
+      okCodes: [200,403]
+
+  pgadmin:
+    type: lando
+    app_mount: false
+    api: 3
+    build_as_root:
+      - >-
+        echo "{
+          \"Servers\": {
+            \"1\": {
+              \"Name\": \"PostgreSQL\",
+              \"Group\": \"Servers\",
+              \"Host\": \"db\",
+              \"Port\": 5432,
+              \"MaintenanceDB\": \"postgres\",
+              \"Username\": \"admin@example.com\",
+              \"SSLMode\": \"prefer\",
+              \"Shared\": true
+            }
+          }
+        }" > /pgadmin4/servers.json
+      - echo "#!/bin/sh" > /override.sh
+      - echo "exec /entrypoint.sh" >> /override.sh
+      - chmod +x /override.sh
+    services:
+      image: dpage/pgadmin4
+      command: /override.sh
+      ports: [80]
+      environment:
+        PGADMIN_DEFAULT_EMAIL: *default-user
+        PGADMIN_DEFAULT_PASSWORD: *default-user
+        PGADMIN_CONFIG_SERVER_MODE: 'False'
+        PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    scanner:
+      okCodes: [302]
+
+proxy:
+  api:
+    - not-three-api.local.scolastico.me:4000
+  pgadmin:
+    - not-three-pgadmin.local.scolastico.me
+  minio:
+    - not-three-minio-public.local.scolastico.me:9000
+    - not-three-minio-admin.local.scolastico.me:9001
+
+tooling:
+  pnpm:
+    service: api
+  mc:
+    service: minio
+    user: root
+
+events:
+  post-start:
+    - echo ""
+    - echo "Login for db, minio and pgAdmin is admin@example.com (as user and password)"
+    - echo ""

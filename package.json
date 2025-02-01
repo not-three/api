@@ -10,6 +10,7 @@
     "dev": "LOG_LEVEL=debug nest start --watch",
     "dev:verbose": "LOG_LEVEL=verbose nest start --watch",
     "dev:trace": "LOG_LEVEL=trace nest start --watch",
+    "dev:log": "LOG_LEVEL=log nest start --watch",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -48,8 +49,7 @@
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "sqlite3": "^5.1.7",
-    "typedoc": "^0.27.6"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
@@ -74,6 +74,7 @@
     "ts-loader": "^9.4.3",
     "ts-node": "^10.9.1",
     "tsconfig-paths": "^4.2.0",
+    "typedoc": "^0.27.6",
     "typescript": "^5.1.3"
   }
 }

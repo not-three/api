@@ -1,6 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { BaseConfig } from 'src/config/Base';
-import * as dotenv from 'dotenv';
+import { Injectable } from "@nestjs/common";
+import { BaseConfig } from "src/config/Base";
 
 @Injectable()
 export class ConfigService {
@@ -8,7 +7,6 @@ export class ConfigService {
 
   get() {
     if (this.config) return this.config;
-    dotenv.config();
     this.config = new BaseConfig();
     return this.config;
   }

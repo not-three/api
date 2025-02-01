@@ -35,4 +35,11 @@ export class InfoResponse {
     example: 10_000,
   })
   fileTransferMaxSize: number;
+
+  @ApiProperty({
+    description:
+      'If this instance is running in private mode and requires a password',
+    example: false,
+  })
+  privateMode: boolean;
 }

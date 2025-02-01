@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { DatabaseService } from 'src/services/database.service';
+import { getIp } from './getIp';
 
 @Catch()
 export class ExceptionsFilter implements ExceptionFilter {
@@ -18,7 +19,7 @@ export class ExceptionsFilter implements ExceptionFilter {
     private readonly db: DatabaseService,
   ) {}
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const { httpAdapter } = this.httpAdapterHost;
     const ctx = host.switchToHttp();
     const isHttpException = exception instanceof HttpException;
@@ -28,7 +29,7 @@ export class ExceptionsFilter implements ExceptionFilter {
     else if (!isHttpException) this.logger.error(exception);
     if (!isHttpException || exception.getStatus() !== HttpStatus.I_AM_A_TEAPOT)
       this.db
-        .createRequest(ctx.getRequest().ip, true)
+        .createRequest(await getIp(ctx.getRequest()), true)
         .catch((e) => this.logger.error(e));
 
     const responseBody = isHttpException

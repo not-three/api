@@ -20,6 +20,7 @@ import { DatabaseService } from './database.service';
 export class S3Service implements OnModuleInit {
   private readonly logger = new Logger(S3Service.name);
   private client: S3Client | null = null;
+  private publicClient: S3Client | null = null;
   private bucket = 'files';
 
   constructor(
@@ -35,6 +36,16 @@ export class S3Service implements OnModuleInit {
     this.client = new S3Client({
       endpoint: cfg.s3Endpoint,
       region: cfg.s3Region,
+      forcePathStyle: cfg.s3ForcePathStyle,
+      credentials: {
+        accessKeyId: cfg.s3AccessKeyId,
+        secretAccessKey: cfg.s3SecretAccessKey,
+      },
+    });
+    this.publicClient = new S3Client({
+      endpoint: cfg.s3PublicEndpoint || cfg.s3Endpoint,
+      region: cfg.s3Region,
+      forcePathStyle: cfg.s3ForcePathStyle,
       credentials: {
         accessKeyId: cfg.s3AccessKeyId,
         secretAccessKey: cfg.s3SecretAccessKey,
@@ -42,9 +53,10 @@ export class S3Service implements OnModuleInit {
     });
   }
 
-  private getClient() {
-    if (!this.client) throw new Error('S3 client not initialized');
-    return this.client;
+  private getClient(publicClient = false): S3Client {
+    if (!this.client || !this.publicClient)
+      throw new Error('S3 client not initialized');
+    return publicClient ? this.publicClient : this.client;
   }
 
   async exists(key: string): Promise<boolean> {
@@ -61,10 +73,11 @@ export class S3Service implements OnModuleInit {
   }
 
   async createDownloadUrl(key: string): Promise<string> {
-    const cache = await this.cache.get<string>(`downloadUrl:${key}`);
+    const cacheKey = `downloadUrl:${key}`;
+    const cache = await this.cache.get<string>(cacheKey);
     if (cache) return cache;
     const url = await getSignedUrl(
-      this.getClient(),
+      this.getClient(true),
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
@@ -72,7 +85,7 @@ export class S3Service implements OnModuleInit {
       { expiresIn: 3600 },
     );
     this.logger.debug(`Created download URL for ${key}`);
-    this.cache.set(`downloadUrl:${key}`, url, 3300_000);
+    this.cache.set(cacheKey, url, 3300_000);
     return url;
   }
 
@@ -101,8 +114,8 @@ export class S3Service implements OnModuleInit {
     partNumber: number,
     contentLength: number,
   ): Promise<string> {
-    const res = await getSignedUrl(
-      this.getClient(),
+    const url = await getSignedUrl(
+      this.getClient(true),
       new UploadPartCommand({
         Bucket: this.bucket,
         Key: key,
@@ -113,7 +126,7 @@ export class S3Service implements OnModuleInit {
       { expiresIn: 60 },
     );
     this.logger.debug(`Created upload URL for part ${partNumber} of ${key}`);
-    return res;
+    return url;
   }
 
   async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
@@ -146,6 +159,17 @@ export class S3Service implements OnModuleInit {
       }),
     );
     this.logger.log(`Completed multipart upload for ${key}`);
+  }
+
+  async getSize(key: string): Promise<number> {
+    const cache = await this.cache.get<number>(`fileSize:${key}`);
+    if (cache) return cache;
+    const head = await this.getClient().send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    const size = Number(head.ContentLength);
+    this.cache.set(`fileSize:${key}`, size, 3300_000);
+    return size;
   }
 
   @Cron('30 * * * * *')
