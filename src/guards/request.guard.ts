@@ -4,10 +4,10 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
-} from '@nestjs/common';
-import { ConfigService } from 'src/services/config.service';
-import { DatabaseService } from 'src/services/database.service';
-import { getIp } from '../etc/getIp';
+} from "@nestjs/common";
+import { ConfigService } from "src/services/config.service";
+import { DatabaseService } from "src/services/database.service";
+import { getIp } from "../etc/getIp";
 
 @Injectable()
 export class RequestGuard implements CanActivate {
@@ -26,7 +26,7 @@ export class RequestGuard implements CanActivate {
     if (ban) await this.db.ban(ip);
     if (count.total >= limits.maxRequestsPerIpPerMinute || ban)
       throw new HttpException(
-        'Too many requests',
+        "Too many requests",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     await this.db.createRequest(ip, false);

@@ -6,25 +6,25 @@ import {
   Query,
   Req,
   Res,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   ApiExcludeEndpoint,
   ApiQuery,
   ApiResponse,
   ApiTags,
-} from '@nestjs/swagger';
-import { Request, Response } from 'express';
-import { version } from '../../package.json';
-import { InfoResponse } from 'src/types/api/InfoResponse';
-import { StatsResponse } from 'src/types/api/StatsResponse';
-import { DatabaseService } from 'src/services/database.service';
-import { ErrorDecorator } from 'src/decorator/error.decorator';
-import { GlobalDecorator } from 'src/decorator/global.decorator';
-import { getIp } from 'src/etc/getIp';
-import { ConfigService } from 'src/services/config.service';
+} from "@nestjs/swagger";
+import { Request, Response } from "express";
+import { version } from "../../package.json";
+import { InfoResponse } from "src/types/api/InfoResponse";
+import { StatsResponse } from "src/types/api/StatsResponse";
+import { DatabaseService } from "src/services/database.service";
+import { ErrorDecorator } from "src/decorator/error.decorator";
+import { GlobalDecorator } from "src/decorator/global.decorator";
+import { getIp } from "src/etc/getIp";
+import { ConfigService } from "src/services/config.service";
 
 @Controller()
-@ApiTags('system')
+@ApiTags("system")
 export class StatsController {
   constructor(
     private readonly db: DatabaseService,
@@ -34,10 +34,10 @@ export class StatsController {
   @Get()
   @ApiExcludeEndpoint()
   getRoot(@Res() res: Response): void {
-    res.redirect('/swagger');
+    res.redirect("/swagger");
   }
 
-  @Get('info')
+  @Get("info")
   @ApiResponse({ type: InfoResponse, status: HttpStatus.OK })
   @GlobalDecorator(true)
   async getInfo(@Req() req: Request): Promise<InfoResponse> {
@@ -53,16 +53,16 @@ export class StatsController {
     };
   }
 
-  @Get('stats')
-  @ApiQuery({ name: 'password', required: false })
+  @Get("stats")
+  @ApiQuery({ name: "password", required: false })
   @ApiResponse({ type: StatsResponse, status: HttpStatus.OK })
-  @ErrorDecorator(HttpStatus.FORBIDDEN, 'The provided password is incorrect')
+  @ErrorDecorator(HttpStatus.FORBIDDEN, "The provided password is incorrect")
   @GlobalDecorator()
-  getStats(@Query('password') password: string): Promise<StatsResponse> {
+  getStats(@Query("password") password: string): Promise<StatsResponse> {
     const { statsPassword } = this.cfg.get();
     if (statsPassword && password !== statsPassword)
       throw new HttpException(
-        'The provided password is incorrect',
+        "The provided password is incorrect",
         HttpStatus.FORBIDDEN,
       );
     return this.db.getStats();

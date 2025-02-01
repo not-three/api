@@ -5,20 +5,20 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
   OnModuleInit,
-} from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cron } from '@nestjs/schedule';
-import { Cache } from 'cache-manager';
-import { resolve, join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+} from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cron } from "@nestjs/schedule";
+import { Cache } from "cache-manager";
+import { resolve, join } from "path";
+import { mkdirSync, existsSync } from "fs";
 
-import { ConfigService } from './config.service';
-import { Note, NoteInsert } from 'src/types/db/Note';
-import { FileInsert, File } from 'src/types/db/File';
-import { StatsResponse } from 'src/types/api/StatsResponse';
+import { ConfigService } from "./config.service";
+import { Note, NoteInsert } from "src/types/db/Note";
+import { FileInsert, File } from "src/types/db/File";
+import { StatsResponse } from "src/types/api/StatsResponse";
 
-import knex from 'knex';
-import { nanoId, pRetry } from 'src/etc/esm-fix';
+import knex from "knex";
+import { nanoId, pRetry } from "src/etc/esm-fix";
 
 @Injectable()
 export class DatabaseService
@@ -45,8 +45,8 @@ export class DatabaseService
   async onModuleInit() {
     try {
       const cfg = this.config.get().database;
-      if (cfg.mode === 'sqlite3') {
-        const dir = resolve(join(process.cwd(), cfg.filename, '..'));
+      if (cfg.mode === "sqlite3") {
+        const dir = resolve(join(process.cwd(), cfg.filename, ".."));
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       }
       this.knex = knex({
@@ -54,10 +54,10 @@ export class DatabaseService
         connection: cfg,
         useNullAsDefault: true,
       });
-      await this.knex.raw('SELECT 1;');
-      this.logger.log('Connected to database');
+      await this.knex.raw("SELECT 1;");
+      this.logger.log("Connected to database");
     } catch (e) {
-      this.logger.fatal('Failed to connect to database');
+      this.logger.fatal("Failed to connect to database");
       this.logger.fatal(e?.stack ?? e);
       process.exit(1);
     }
@@ -96,7 +96,7 @@ export class DatabaseService
 
   getNote(id: string): Promise<Note | null> {
     return this.getFromCache(`note-${id}`, async () => {
-      const res = await this.knex('notes').where('id', id).first();
+      const res = await this.knex("notes").where("id", id).first();
       return res
         ? {
             ...res,
@@ -108,38 +108,38 @@ export class DatabaseService
   }
 
   async createNote(note: NoteInsert): Promise<string> {
-    const res = await this.insert('notes', note);
+    const res = await this.insert("notes", note);
     this.logger.log(`Created note ${res}`);
     return res;
   }
 
   async deleteNote(id: string) {
-    await this.knex('notes').where('id', id).del();
+    await this.knex("notes").where("id", id).del();
     await this.cache.del(`note-${id}`);
     this.logger.log(`Deleted note ${id}`);
   }
 
   async getTokens(ip: string): Promise<number> {
-    const res = await this.knex('tokens').where('ip', ip).select('used');
+    const res = await this.knex("tokens").where("ip", ip).select("used");
     return res.reduce((acc, cur) => acc + cur.used, 0);
   }
 
   async createToken(ip: string, used: number): Promise<void> {
-    await this.insert('tokens', { ip, used });
+    await this.insert("tokens", { ip, used });
     this.logger.debug(`Created token for ${ip} with used=${used}`);
   }
 
   async getRequests(ip: string): Promise<{ total: number; failed: number }> {
     const res = await Promise.all([
-      this.knex('requests')
-        .where('ip', ip)
-        .where('failed', false)
-        .count('id as count')
+      this.knex("requests")
+        .where("ip", ip)
+        .where("failed", false)
+        .count("id as count")
         .first(),
-      this.knex('requests')
-        .where('ip', ip)
-        .where('failed', true)
-        .count('id as count')
+      this.knex("requests")
+        .where("ip", ip)
+        .where("failed", true)
+        .count("id as count")
         .first(),
     ]).then((r) => r.map((r) => r.count as number));
     return {
@@ -149,26 +149,26 @@ export class DatabaseService
   }
 
   async createRequest(ip: string, failed: boolean): Promise<void> {
-    await this.insert('requests', { ip, failed });
+    await this.insert("requests", { ip, failed });
     this.logger.debug(`Created request for ${ip} with failed=${failed}`);
   }
 
   async isBanned(ip: string): Promise<boolean> {
     const cache = await this.cache.get(`ban-${ip}`);
     if (cache) return true;
-    const res = !!(await this.knex('bans').where('ip', ip).first());
+    const res = !!(await this.knex("bans").where("ip", ip).first());
     if (res) await this.cache.set(`ban-${ip}`, true, 60_000);
     return res;
   }
 
   async ban(ip: string) {
-    await this.knex('bans').insert({ ip, created_at: Date.now() });
+    await this.knex("bans").insert({ ip, created_at: Date.now() });
     this.logger.warn(`Banned ${ip}`);
   }
 
   getFile(id: string): Promise<File | null> {
     return this.getFromCache(`file-${id}`, async () => {
-      const res = await this.knex('files').where('id', id).first();
+      const res = await this.knex("files").where("id", id).first();
       if (!res) return null;
       return {
         ...res,
@@ -180,7 +180,7 @@ export class DatabaseService
   }
 
   async createFile(file: FileInsert): Promise<string> {
-    const res = await this.insert('files', {
+    const res = await this.insert("files", {
       ...file,
       updated_at: Date.now(),
     } as File);
@@ -189,83 +189,83 @@ export class DatabaseService
   }
 
   async getFiles(ip: string): Promise<File[]> {
-    return await this.knex('files').where('ip', ip).select();
+    return await this.knex("files").where("ip", ip).select();
   }
 
   async getTotalFiles(): Promise<number> {
     return Number(
-      (await this.knex('files').count('id as count').first()).count,
+      (await this.knex("files").count("id as count").first()).count,
     );
   }
 
   async deleteFile(id: string): Promise<void> {
-    await this.knex('files').where('id', id).del();
+    await this.knex("files").where("id", id).del();
     this.logger.log(`Deleted file ${id}`);
   }
 
   async updateFile(id: string, data: Partial<File>): Promise<void> {
-    await this.knex('files')
-      .where('id', id)
+    await this.knex("files")
+      .where("id", id)
       .update({ ...data, id: undefined, updated_at: Date.now() } as File);
     await this.cache.del(`file-${id}`);
     this.logger.debug(`Updated file ${id}`);
   }
 
   async getExpiredFiles(): Promise<File[]> {
-    return await this.knex('files').where('expires_at', '<', Date.now());
+    return await this.knex("files").where("expires_at", "<", Date.now());
   }
 
   async getUploadFilesLastUpdatedBefore(timestamp: number): Promise<File[]> {
-    return await this.knex('files')
-      .where('upload_id', '!=', null)
-      .andWhere('updated_at', '<', timestamp);
+    return await this.knex("files")
+      .where("upload_id", "!=", null)
+      .andWhere("updated_at", "<", timestamp);
   }
 
-  @Cron('* * * * *')
+  @Cron("* * * * *")
   async cleanUp() {
     if (!this.ready) return;
     const cfg = this.config.get();
     if (cfg.childInstance) return;
-    this.logger.debug('Running cleanup cron job');
+    this.logger.debug("Running cleanup cron job");
     const timestamp = Date.now();
-    const deletedNotes = await this.knex('notes')
-      .where('expires_at', '<', timestamp)
+    const deletedNotes = await this.knex("notes")
+      .where("expires_at", "<", timestamp)
       .del();
     if (deletedNotes) this.logger.log(`Deleted ${deletedNotes} expired notes`);
 
-    const deletedTokens = await this.knex('tokens')
+    const deletedTokens = await this.knex("tokens")
       .where(
-        'created_at',
-        '<',
+        "created_at",
+        "<",
         timestamp - 60_000 * cfg.limits.tokensExpireAfterMinutes,
       )
       .del();
     if (deletedTokens)
       this.logger.debug(`Deleted ${deletedTokens} expired tokens`);
-    const deletedRequestsNonFailed = await this.knex('requests')
-      .where('created_at', '<', timestamp - 60_000)
-      .andWhere('failed', false)
+    const deletedRequestsNonFailed = await this.knex("requests")
+      .where("created_at", "<", timestamp - 60_000)
+      .andWhere("failed", false)
       .del();
     if (deletedRequestsNonFailed)
       this.logger.debug(
         `Deleted ${deletedRequestsNonFailed} non-failed requests`,
       );
 
-    const deletedRequestsFailed = await this.knex('requests')
+    const deletedRequestsFailed = await this.knex("requests")
       .where(
-        'created_at',
-        '<',
+        "created_at",
+        "<",
         timestamp - 60_000 * cfg.limits.banFailedRequestsResetAfterMinutes,
       )
-      .andWhere('failed', true)
+      .andWhere("failed", true)
       .del();
     if (deletedRequestsFailed)
       this.logger.debug(`Deleted ${deletedRequestsFailed} failed requests`);
 
-    const expiredBans = await this.knex('bans')
+    const expiredBans = await this.knex("bans")
       .where(
-        'created_at',
-        '<',
+        "created_at",
+        "<",
         timestamp - 60_000 * cfg.limits.banDurationMinutes,
       )
       .del();
@@ -283,7 +283,7 @@ export class DatabaseService
   }
 
   getStats(): Promise<StatsResponse> {
-    return this.getFromCache('stats', async () => {
+    return this.getFromCache("stats", async () => {
       const [
         totalNotes,
         requestsInLastMinute,
@@ -293,24 +293,24 @@ export class DatabaseService
         bannedIps,
       ] = await Promise.all(
         [
-          this.knex('notes').count('id as count').first(),
-          this.knex('requests')
-            .where('failed', false)
-            .count('id as count')
+          this.knex("notes").count("id as count").first(),
+          this.knex("requests")
+            .where("failed", false)
+            .count("id as count")
             .first(),
-          this.knex('requests')
-            .where('failed', true)
-            .count('id as count')
+          this.knex("requests")
+            .where("failed", true)
+            .count("id as count")
             .first(),
-          this.knex('files')
-            .whereNot('upload_id', null)
-            .count('id as count')
+          this.knex("files")
+            .whereNot("upload_id", null)
+            .count("id as count")
             .first(),
-          this.knex('files')
-            .where('upload_id', null)
-            .count('id as count')
+          this.knex("files")
+            .where("upload_id", null)
+            .count("id as count")
             .first(),
-          this.knex('bans').count('ip as count').first(),
+          this.knex("bans").count("ip as count").first(),
         ].map((p) => p.then((r) => Number(r.count))),
       );
       return {

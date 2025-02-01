@@ -3,9 +3,9 @@ import {
   CanActivate,
   ExecutionContext,
   Logger,
-} from '@nestjs/common';
-import { DatabaseService } from 'src/services/database.service';
-import { getIp } from '../etc/getIp';
+} from "@nestjs/common";
+import { DatabaseService } from "src/services/database.service";
+import { getIp } from "../etc/getIp";
 
 @Injectable()
 export class LogGuard implements CanActivate {
@@ -17,11 +17,11 @@ export class LogGuard implements CanActivate {
     this.logger.log(
       [
         `Request from ${await getIp(request)}`,
-        ...(request.headers['user-agent']
-          ? [`[${request.headers['user-agent']}]`]
+        ...(request.headers["user-agent"]
+          ? [`[${request.headers["user-agent"]}]`]
           : []),
         `${request.method} ${request.url}`,
-      ].join(' '),
+      ].join(" "),
     );
     return true;
   }

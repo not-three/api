@@ -1,4 +1,4 @@
-import { $bool, $str } from './Helper';
+import { $bool, $str } from "./Helper";
 
 export class CorsConfig {
   /** @hidden */
@@ -9,21 +9,21 @@ export class CorsConfig {
    * @default false
    * @env CORS_ENABLED
    */
-  enabled = $bool('CORS_ENABLED', false);
+  enabled = $bool("CORS_ENABLED", false);
 
   /**
    * The origin(s) to allow.
    * @default '*'
    * @env CORS_ORIGIN
    */
-  origin = $str('CORS_ORIGIN', '*');
+  origin = $str("CORS_ORIGIN", "*");
 
   /**
    * The methods to allow.
    * @default 'GET,HEAD,PUT,PATCH,POST,DELETE'
    * @env CORS_METHODS
    */
-  methods = $str('CORS_METHODS', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  methods = $str("CORS_METHODS", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
 
   /**
    * The headers to allow.
@@ -31,7 +31,7 @@ export class CorsConfig {
    * @env CORS_HEADERS
    */
   headers = $str(
-    'CORS_HEADERS',
-    'Origin,X-Requested-With,Content-Type,Accept,Authorization',
+    "CORS_HEADERS",
+    "Origin,X-Requested-With,Content-Type,Accept,Authorization",
   );
 }

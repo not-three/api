@@ -5,10 +5,10 @@ import {
   Logger,
   HttpStatus,
   HttpException,
-} from '@nestjs/common';
-import { DatabaseService } from 'src/services/database.service';
-import { getIp } from '../etc/getIp';
-import { ConfigService } from 'src/services/config.service';
+} from "@nestjs/common";
+import { DatabaseService } from "src/services/database.service";
+import { getIp } from "../etc/getIp";
+import { ConfigService } from "src/services/config.service";
 
 @Injectable()
 export class BanGuard implements CanActivate {
@@ -26,7 +26,7 @@ export class BanGuard implements CanActivate {
     if (banned) {
       this.logger.warn(`Blocked request from ${ip} due to ban`);
       throw new HttpException(
-        'You are banned, try again later',
+        "You are banned, try again later",
         HttpStatus.I_AM_A_TEAPOT,
       );
     }

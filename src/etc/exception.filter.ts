@@ -5,10 +5,10 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import { HttpAdapterHost } from '@nestjs/core';
-import { DatabaseService } from 'src/services/database.service';
-import { getIp } from './getIp';
+} from "@nestjs/common";
+import { HttpAdapterHost } from "@nestjs/core";
+import { DatabaseService } from "src/services/database.service";
+import { getIp } from "./getIp";
 
 @Catch()
 export class ExceptionsFilter implements ExceptionFilter {
@@ -39,7 +39,7 @@ export class ExceptionsFilter implements ExceptionFilter {
         }
       : {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          message: 'Internal server error',
+          message: "Internal server error",
         };
 
     httpAdapter.reply(ctx.getResponse(), responseBody, responseBody.statusCode);

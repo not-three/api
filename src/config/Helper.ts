@@ -5,7 +5,7 @@ export const $err = (key: string) => {
 
 /** @hidden */
 export const $str = (key: string, def?: string) =>
-  process.env[key] || (typeof def === 'string' ? def : $err(key));
+  process.env[key] || (typeof def === "string" ? def : $err(key));
 
 /** @hidden */
 export const $int = (key: string, def?: number) =>
@@ -17,13 +17,13 @@ export const $float = (key: string, def?: number) =>
 
 /** @hidden */
 export const $bool = (key: string, def?: boolean) =>
-  $str(key, def?.toString()).toLowerCase() === 'true';
+  $str(key, def?.toString()).toLowerCase() === "true";
 
 /** @hidden */
 export const $list = (key: string, def?: string[]) =>
-  $str(key, def?.join(','))
-    .split(',')
-    .filter((x) => x !== '');
+  $str(key, def?.join(","))
+    .split(",")
+    .filter((x) => x !== "");
 
 /** @hidden */
 export const $oneOf = (key: string, values: string[], def?: string) => {
