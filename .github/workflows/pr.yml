@@ -23,7 +23,7 @@ jobs:
         run: npm install -g pnpm
 
       - name: Label the PR
-        uses: actions/labeler@v4
+        uses: actions/labeler@v5
 
       - name: Install dependencies
         run: pnpm install
