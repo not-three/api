@@ -1,4 +1,4 @@
-import { $bool, $int, $str } from './Helper';
+import { $bool, $int, $str } from "./Helper";
 
 export class FileTransferConfig {
   /** @hidden */
@@ -9,21 +9,21 @@ export class FileTransferConfig {
    * @default false
    * @env FILE_TRANSFER_ENABLED
    */
-  enabled = $bool('FILE_TRANSFER_ENABLED', false);
+  enabled = $bool("FILE_TRANSFER_ENABLED", false);
 
   /**
    * The maximum size of a file in MB.
    * @default 10000
    * @env FILE_TRANSFER_MAX_SIZE_MB
    */
-  maxSizeInMB = $int('FILE_TRANSFER_MAX_SIZE_MB', 10_000);
+  maxSizeInMB = $int("FILE_TRANSFER_MAX_SIZE_MB", 10_000);
 
   /**
    * The endpoint of the S3-compatible storage.
    * @default 'http://localhost:9000'
    * @env FILE_TRANSFER_S3_ENDPOINT
    */
-  s3Endpoint = $str('FILE_TRANSFER_S3_ENDPOINT', 'http://localhost:9000');
+  s3Endpoint = $str("FILE_TRANSFER_S3_ENDPOINT", "http://localhost:9000");
 
   /**
    * The public endpoint which should be reachable by the client.
@@ -31,14 +31,14 @@ export class FileTransferConfig {
    * @default ''
    * @env FILE_TRANSFER_S3_PUBLIC_ENDPOINT
    */
-  s3PublicEndpoint = $str('FILE_TRANSFER_S3_PUBLIC_ENDPOINT', '');
+  s3PublicEndpoint = $str("FILE_TRANSFER_S3_PUBLIC_ENDPOINT", "");
 
   /**
    * The region of the S3-compatible storage.
    * @default 'us-east-1'
    * @env FILE_TRANSFER_S3_REGION
    */
-  s3Region = $str('FILE_TRANSFER_S3_REGION', 'us-east-1');
+  s3Region = $str("FILE_TRANSFER_S3_REGION", "us-east-1");
 
   /**
    * The bucket of the S3-compatible storage.
@@ -49,7 +49,7 @@ export class FileTransferConfig {
    * @default 'bucket'
    * @env FILE_TRANSFER_S3_BUCKET
    */
-  s3Bucket = $str('FILE_TRANSFER_S3_BUCKET', 'bucket');
+  s3Bucket = $str("FILE_TRANSFER_S3_BUCKET", "bucket");
 
   /**
    * The access key ID of the S3-compatible storage.
@@ -57,7 +57,7 @@ export class FileTransferConfig {
    * @env FILE_TRANSFER_S3_ACCESS_KEY_ID
    * @see {@link FileTransferConfig#s3SecretAccessKey}
    */
-  s3AccessKeyId = $str('FILE_TRANSFER_S3_ACCESS_KEY_ID', 'accessKeyId');
+  s3AccessKeyId = $str("FILE_TRANSFER_S3_ACCESS_KEY_ID", "accessKeyId");
 
   /**
    * The secret access key of the S3-compatible storage.
@@ -105,8 +105,8 @@ export class FileTransferConfig {
    * @see [AWS Create a User](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)
    */
   s3SecretAccessKey = $str(
-    'FILE_TRANSFER_S3_SECRET_ACCESS_KEY',
-    'secretAccessKey',
+    "FILE_TRANSFER_S3_SECRET_ACCESS_KEY",
+    "secretAccessKey",
   );
 
   /**
@@ -114,14 +114,14 @@ export class FileTransferConfig {
    * @default false
    * @env FILE_TRANSFER_S3_FORCE_PATH_STYLE
    */
-  s3ForcePathStyle = $bool('FILE_TRANSFER_S3_FORCE_PATH_STYLE', false);
+  s3ForcePathStyle = $bool("FILE_TRANSFER_S3_FORCE_PATH_STYLE", false);
 
   /**
    * The time in minutes after which a file is deleted.
    * @default 15
    * @env FILE_TRANSFER_STORAGE_TIME_MINUTES
    */
-  storageTimeInMinutes = $int('FILE_TRANSFER_STORAGE_TIME_MINUTES', 15);
+  storageTimeInMinutes = $int("FILE_TRANSFER_STORAGE_TIME_MINUTES", 15);
 
   /**
    * The time in minutes how long a file can be uploaded.
@@ -129,7 +129,7 @@ export class FileTransferConfig {
    * @default 120
    * @env FILE_TRANSFER_UPLOAD_TIME_MINUTES
    */
-  uploadTimeInMinutes = $int('FILE_TRANSFER_UPLOAD_TIME_MINUTES', 120);
+  uploadTimeInMinutes = $int("FILE_TRANSFER_UPLOAD_TIME_MINUTES", 120);
 
   /**
    * The time in minutes between each upload part,
@@ -137,14 +137,14 @@ export class FileTransferConfig {
    * @default 10
    * @env FILE_TRANSFER_UPLOAD_PART_TIME_MINUTES
    */
-  uploadPartTimeInMinutes = $int('FILE_TRANSFER_UPLOAD_PART_TIME_MINUTES', 10);
+  uploadPartTimeInMinutes = $int("FILE_TRANSFER_UPLOAD_PART_TIME_MINUTES", 10);
 
   /**
    * The maximum amount of files an IP address can upload simultaneously.
    * @default 1
    * @env FILE_TRANSFER_SIMULTANEOUS_FILES_PER_IP
    */
-  simultaneousFilesPerIp = $int('FILE_TRANSFER_SIMULTANEOUS_FILES_PER_IP', 1);
+  simultaneousFilesPerIp = $int("FILE_TRANSFER_SIMULTANEOUS_FILES_PER_IP", 1);
 
   /**
    * The maximum amount of files that can be uploaded simultaneously globally.
@@ -152,7 +152,7 @@ export class FileTransferConfig {
    * @env FILE_TRANSFER_GLOBAL_MAXIMUM_SIMULTANEOUS_FILES
    */
   globalMaximumSimultaneousFiles = $int(
-    'FILE_TRANSFER_GLOBAL_MAXIMUM_SIMULTANEOUS_FILES',
+    "FILE_TRANSFER_GLOBAL_MAXIMUM_SIMULTANEOUS_FILES",
     25,
   );
 }

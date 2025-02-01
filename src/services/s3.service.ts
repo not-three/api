@@ -1,5 +1,5 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from './config.service';
+import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "./config.service";
 import {
   S3Client,
   DeleteObjectCommand,
@@ -9,19 +9,19 @@ import {
   UploadPartCommand,
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
-import { Cron } from '@nestjs/schedule';
-import { DatabaseService } from './database.service';
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
+import { Cron } from "@nestjs/schedule";
+import { DatabaseService } from "./database.service";
 
 @Injectable()
 export class S3Service implements OnModuleInit {
   private readonly logger = new Logger(S3Service.name);
   private client: S3Client | null = null;
   private publicClient: S3Client | null = null;
-  private bucket = 'files';
+  private bucket = "files";
 
   constructor(
     private readonly cfg: ConfigService,
@@ -55,7 +55,7 @@ export class S3Service implements OnModuleInit {
 
   private getClient(publicClient = false): S3Client {
     if (!this.client || !this.publicClient)
-      throw new Error('S3 client not initialized');
+      throw new Error("S3 client not initialized");
     return publicClient ? this.publicClient : this.client;
   }
 
@@ -172,12 +172,12 @@ export class S3Service implements OnModuleInit {
     return size;
   }
 
-  @Cron('30 * * * * *')
+  @Cron("30 * * * * *")
   async cleanUp() {
     if (!this.client) return;
     const cfg = this.cfg.get();
     if (cfg.childInstance) return;
-    this.logger.debug('Running cleanup cron job');
+    this.logger.debug("Running cleanup cron job");
     let aborted = 0;
     let deleted = 0;
     for (const file of await this.db.getUploadFilesLastUpdatedBefore(

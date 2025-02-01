@@ -10,6 +10,6 @@ export interface File {
 }
 
 export type FileInsert = Omit<
-  Omit<Omit<File, 'id'>, 'updated_at'>,
-  'created_at'
+  Omit<Omit<File, "id">, "updated_at">,
+  "created_at"
 >;

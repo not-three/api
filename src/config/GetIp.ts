@@ -1,4 +1,4 @@
-import { $bool, $int, $str } from './Helper';
+import { $bool, $int, $str } from "./Helper";
 
 export class GetIpConfig {
   /** @hidden */
@@ -10,7 +10,7 @@ export class GetIpConfig {
    * @default false
    * @env BEHIND_PROXY
    */
-  behindProxy = $bool('BEHIND_PROXY', false);
+  behindProxy = $bool("BEHIND_PROXY", false);
 
   /**
    * Tell the api to use a custom header for the IP address. Only used if `behindProxy` is true.
@@ -21,7 +21,7 @@ export class GetIpConfig {
    * @default 'X-Forwarded-For'
    * @env IP_HEADER
    */
-  ipHeader = $str('IP_HEADER', 'X-Forwarded-For');
+  ipHeader = $str("IP_HEADER", "X-Forwarded-For");
 
   /**
    * Trust only the IP header if the request originates from one of the following ip addresses.
@@ -29,7 +29,7 @@ export class GetIpConfig {
    * @default '0.0.0.0/0,::/0'
    * @env TRUSTED_PROXIES
    */
-  trustedProxies = $str('TRUSTED_PROXIES', '0.0.0.0/0,::/0');
+  trustedProxies = $str("TRUSTED_PROXIES", "0.0.0.0/0,::/0");
 
   /**
    * Trust only the IP header if the request originates from one of the following urls.
@@ -39,14 +39,14 @@ export class GetIpConfig {
    * @default ''
    * @env TRUSTED_PROXIES_URLS
    */
-  trustedProxiesUrls = $str('TRUSTED_PROXIES_URLS', '');
+  trustedProxiesUrls = $str("TRUSTED_PROXIES_URLS", "");
 
   /**
    * Cache downloaded proxy IP addresses for this amount of seconds.
    * @default 3600
    * @env TRUSTED_PROXIES_CACHE
    */
-  trustedProxiesCache = $int('TRUSTED_PROXIES_CACHE', 3600);
+  trustedProxiesCache = $int("TRUSTED_PROXIES_CACHE", 3600);
 
   /**
    * Get the proxy IP address from an arbitrary header.
@@ -56,7 +56,7 @@ export class GetIpConfig {
    * @default ''
    * @env PROXY_IP_HEADER
    */
-  proxyHeader = $str('PROXY_IP_HEADER', '');
+  proxyHeader = $str("PROXY_IP_HEADER", "");
 
   /**
    * IPv6 address length to be stripped from the end in bytes.
@@ -71,5 +71,5 @@ export class GetIpConfig {
    * @default 8
    * @env STRIP_IPV6_ADDRESS
    */
-  stripIpv6Address = $int('STRIP_IPV6_ADDRESS', 8);
+  stripIpv6Address = $int("STRIP_IPV6_ADDRESS", 8);
 }

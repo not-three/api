@@ -9,4 +9,4 @@ export interface Note {
   mime: string | null;
 }
 
-export type NoteInsert = Omit<Omit<Note, 'id'>, 'created_at'>;
+export type NoteInsert = Omit<Omit<Note, "id">, "created_at">;
