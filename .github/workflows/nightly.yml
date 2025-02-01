@@ -57,3 +57,6 @@ jobs:
           publish_dir: ./docs
           destination_dir: nightly
           publish_branch: docs
+
+      - name: Send webhook to servers
+        run: "curl -H \"Authorization: Bearer ${{ secrets.PORTAINER_WEBHOOK_SECRET }}\" ${{ secrets.PORTAINER_WEBHOOK_URL }}"
