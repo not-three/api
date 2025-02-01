@@ -1,19 +1,27 @@
 ci:
-  - .github/workflows/*
+- changed-files:
+  - any-glob-to-any-file: [.github/workflows/*]
 controller:
-  - src/controller/**
+- changed-files:
+  - any-glob-to-any-file: [src/controller/**]
 decorator:
-  - src/decorator/**
+- changed-files:
+  - any-glob-to-any-file: [src/decorator/**]
 guards:
-  - src/guards/**
+- changed-files:
+  - any-glob-to-any-file: [src/guards/**]
 services:
-  - src/services/**
+- changed-files:
+  - any-glob-to-any-file: [src/services/**]
 types:
-  - src/types/**
+- changed-files:
+  - any-glob-to-any-file: [src/types/**]
 code:
-  - src/**
+- changed-files:
+  - any-glob-to-any-file: [src/**]
 docker:
-  - Dockerfile
+- changed-files:
+  - any-glob-to-any-file: [Dockerfile]
 package:
-  - package.json
-  - pnpm-lock.yaml
+- changed-files:
+  - any-glob-to-any-file: [package.json, pnpm-lock.yaml]
