@@ -1,11 +1,19 @@
-ci: .github/workflows/*
-controller: src/controller/**
-decorator: src/decorator/**
-guards: src/guards/**
-services: src/services/**
-types: src/types/**
-code: src/**
-docker: Dockerfile
+ci:
+  - .github/workflows/*
+controller:
+  - src/controller/**
+decorator:
+  - src/decorator/**
+guards:
+  - src/guards/**
+services:
+  - src/services/**
+types:
+  - src/types/**
+code:
+  - src/**
+docker:
+  - Dockerfile
 package:
   - package.json
   - pnpm-lock.yaml
