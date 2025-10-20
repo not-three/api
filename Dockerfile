@@ -1,4 +1,4 @@
-FROM node:24-alpine as build-stage
+FROM node:25-alpine as build-stage
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package.json .
@@ -8,7 +8,7 @@ COPY . .
 RUN pnpm build
 RUN pnpm prune --prod
 
-FROM node:24-alpine
+FROM node:25-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
 
