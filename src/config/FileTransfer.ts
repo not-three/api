@@ -117,6 +117,13 @@ export class FileTransferConfig {
   s3ForcePathStyle = $bool("FILE_TRANSFER_S3_FORCE_PATH_STYLE", false);
 
   /**
+   * Whether to follow redirects.
+   * @default true
+   * @env FILE_TRANSFER_S3_FOLLOW_REDIRECT
+   */
+  s3FollowRedirect = $bool("FILE_TRANSFER_S3_FOLLOW_REDIRECT", true);
+
+  /**
    * The time in minutes after which a file is deleted.
    * @default 15
    * @env FILE_TRANSFER_STORAGE_TIME_MINUTES
