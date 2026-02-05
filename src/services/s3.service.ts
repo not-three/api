@@ -37,6 +37,7 @@ export class S3Service implements OnModuleInit {
       endpoint: cfg.s3Endpoint,
       region: cfg.s3Region,
       forcePathStyle: cfg.s3ForcePathStyle,
+      followRegionRedirects: cfg.s3FollowRedirect,
       credentials: {
         accessKeyId: cfg.s3AccessKeyId,
         secretAccessKey: cfg.s3SecretAccessKey,
@@ -46,6 +47,7 @@ export class S3Service implements OnModuleInit {
       endpoint: cfg.s3PublicEndpoint || cfg.s3Endpoint,
       region: cfg.s3Region,
       forcePathStyle: cfg.s3ForcePathStyle,
+      followRegionRedirects: cfg.s3FollowRedirect,
       credentials: {
         accessKeyId: cfg.s3AccessKeyId,
         secretAccessKey: cfg.s3SecretAccessKey,
