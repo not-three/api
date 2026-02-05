@@ -1,5 +1,6 @@
-FROM node:25-alpine as build-stage
+FROM node:25-alpine AS build-stage
 WORKDIR /app
+RUN apk add --no-cache python3 make g++ py3-setuptools
 RUN npm install -g pnpm
 COPY package.json .
 COPY pnpm-lock.yaml .
