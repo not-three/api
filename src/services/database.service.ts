@@ -49,9 +49,27 @@ export class DatabaseService
         const dir = resolve(join(process.cwd(), cfg.filename, ".."));
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       }
+
+      const connection: any =
+        cfg.mode === "sqlite3"
+          ? { filename: cfg.filename }
+          : {
+              host: cfg.host,
+              port: cfg.port,
+              user: cfg.user,
+              password: cfg.password,
+              database: cfg.database,
+            };
+
+      if (cfg.mode !== "sqlite3" && cfg.ssl) {
+        connection.ssl = cfg.sslRejectUnauthorized
+          ? true
+          : { rejectUnauthorized: false };
+      }
+
       this.knex = knex({
         client: cfg.mode,
-        connection: cfg,
+        connection,
         useNullAsDefault: true,
       });
       await this.knex.raw("SELECT 1;");
