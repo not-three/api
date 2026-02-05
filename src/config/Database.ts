@@ -55,6 +55,20 @@ export class DatabaseConfig {
   database = $str("DATABASE_NAME", "database");
 
   /**
+   * Use SSL for the database connection.
+   * @default false
+   * @env DATABASE_SSL
+   */
+  ssl = $bool("DATABASE_SSL", false);
+
+  /**
+   * If SSL is used, should the certificate be verified.
+   * @default true
+   * @env DATABASE_SSL_REJECT_UNAUTHORIZED
+   */
+  sslRejectUnauthorized = $bool("DATABASE_SSL_REJECT_UNAUTHORIZED", true);
+
+  /**
    * In the rare case that you need to downgrade the database, set this temporarily to true.
    * Be aware that this can lead to data loss. Make sure to have backups.
    * @default false

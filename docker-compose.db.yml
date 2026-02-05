@@ -18,7 +18,7 @@ services:
       POSTGRES_DB: db
     volumes:
       - pg:/var/lib/postgresql/data
-  
+
   app:
     image: ghcr.io/not-three/api:nightly
     <<: *restart
