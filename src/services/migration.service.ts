@@ -11,7 +11,7 @@ export class MigrationService implements OnApplicationBootstrap {
   constructor(
     private readonly db: DatabaseService,
     private readonly cfg: ConfigService,
-  ) {}
+  ) { }
 
   private readonly migrations: ((knex: knex.Knex) => Promise<void>)[] = [
     async (knex) => {
@@ -59,6 +59,25 @@ export class MigrationService implements OnApplicationBootstrap {
           knex.schema.dropTable("requests").toString(),
           knex.schema.dropTable("bans").toString(),
           knex.schema.dropTable("files").toString(),
+        ].join(this.breakString),
+      });
+    },
+    async (knex) => {
+      await knex.schema.alterTable("notes", (table) => {
+        table.string("mime", 64).nullable();
+      });
+      await knex("migrations").insert({
+        id: 2,
+        revert: [
+          knex
+            .update("notes", { mime: null })
+            .whereRaw("LENGTH(mime) > 16")
+            .toString(),
+          knex.schema
+            .alterTable("notes", (table) => {
+              table.string("mime", 16).nullable();
+            })
+            .toString(),
         ].join(this.breakString),
       });
     },
