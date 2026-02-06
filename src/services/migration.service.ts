@@ -11,7 +11,7 @@ export class MigrationService implements OnApplicationBootstrap {
   constructor(
     private readonly db: DatabaseService,
     private readonly cfg: ConfigService,
-  ) { }
+  ) {}
 
   private readonly migrations: ((knex: knex.Knex) => Promise<void>)[] = [
     async (knex) => {
