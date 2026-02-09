@@ -27,9 +27,9 @@
     "pg:reset": "pnpm pg:base down --volumes"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.983.0",
-    "@aws-sdk/s3-presigned-post": "^3.983.0",
-    "@aws-sdk/s3-request-presigner": "^3.983.0",
+    "@aws-sdk/client-s3": "^3.986.0",
+    "@aws-sdk/s3-presigned-post": "^3.986.0",
+    "@aws-sdk/s3-request-presigner": "^3.986.0",
     "@nestjs/cache-manager": "^3.1.0",
     "@nestjs/common": "^11.1.13",
     "@nestjs/core": "^11.1.13",
@@ -38,7 +38,7 @@
     "@nestjs/swagger": "^11.2.6",
     "cache-manager": "^7.2.8",
     "crypto-js": "^4.2.0",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.2.4",
     "fix-esm": "^1.0.1",
     "ip-regex": "^5.0.0",
     "ipaddr.js": "^2.3.0",
