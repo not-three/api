@@ -4,6 +4,7 @@ RUN apk add --no-cache python3 make g++ py3-setuptools
 RUN npm install -g pnpm
 COPY package.json .
 COPY pnpm-lock.yaml .
+COPY pnpm-workspace.yaml .
 RUN pnpm install
 COPY . .
 RUN pnpm build
