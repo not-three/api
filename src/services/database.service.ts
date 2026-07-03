@@ -76,7 +76,7 @@ export class DatabaseService
       this.logger.log("Connected to database");
     } catch (e) {
       this.logger.fatal("Failed to connect to database");
-      this.logger.fatal(e?.stack ?? e);
+      this.logger.fatal((e as Error)?.stack ?? e);
       process.exit(1);
     }
   }
