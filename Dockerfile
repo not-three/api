@@ -1,4 +1,4 @@
-FROM node:25-alpine AS build-stage
+FROM node:26-alpine AS build-stage
 WORKDIR /app
 RUN apk add --no-cache python3 make g++ py3-setuptools
 RUN npm install -g pnpm
@@ -10,7 +10,7 @@ COPY . .
 RUN pnpm build
 RUN pnpm prune --prod
 
-FROM node:25-alpine
+FROM node:26-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
 
