@@ -121,6 +121,29 @@ describe("file transfer lifecycle", () => {
     expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBeGreaterThan(0);
   });
 
+  // A repeated query parameter arrives as an array, which used to blow up on
+  // the .toLowerCase() call. It must fall back to the redirect instead.
+  it("redirects when the json query parameter is repeated", async () => {
+    const ip = "10.2.1.9";
+    const { body } = await start(ip).expect(201);
+    await request(t.server)
+      .get(`/file/upload/${body.id}`)
+      .query({ length: 1000 })
+      .set("X-Forwarded-For", ip)
+      .expect(200);
+    await request(t.server)
+      .put(`/file/upload/${body.id}`)
+      .set("X-Forwarded-For", ip)
+      .send({ etags: ["etag-1"] })
+      .expect(204);
+
+    const res = await request(t.server)
+      .get(`/file/${body.id}?json=true&json=true`)
+      .set("X-Forwarded-For", ip)
+      .expect(302);
+    expect(res.headers.location).toContain("http");
+  });
+
   it("rejects invalid file names", async () => {
     await start("10.2.1.2", "bad name!.txt").expect(400);
   });

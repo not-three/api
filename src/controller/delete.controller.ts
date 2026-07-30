@@ -44,8 +44,11 @@ export class DeleteController {
     if (!note)
       throw new HttpException("The note was not found", HttpStatus.NOT_FOUND);
     let allowed = false;
+    // The body is optional: deleting from the creator ip needs no token at all,
+    // so `body` is undefined whenever the request carries no payload.
+    const token = body?.token ?? null;
     if (note.ip === ip) allowed = true;
-    if (note.delete_token === body.token && body.token !== null) allowed = true;
+    if (note.delete_token === token && token !== null) allowed = true;
     if (!allowed)
       throw new HttpException(
         "You are not sending from the correct IP nor have the correct token",

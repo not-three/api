@@ -60,6 +60,37 @@ describe("note decryption", () => {
       .expect(400);
   });
 
+  // A repeated query parameter makes express hand over an array instead of a
+  // string, so `key.length` counts elements (2) rather than characters and the
+  // length guard above would be bypassed.
+  it("rejects a repeated key query parameter with 400", async () => {
+    await request(t.server)
+      .get(`/note/${id}/decrypt?key=${"x".repeat(33)}&key=y`)
+      .set("X-Forwarded-For", IP)
+      .expect(400);
+  });
+
+  it("rejects a repeated key even when each value is short", async () => {
+    await request(t.server)
+      .get(`/note/${id}/decrypt?key=pw123&key=pw123`)
+      .set("X-Forwarded-For", IP)
+      .expect(400);
+  });
+
+  it("rejects a missing key query parameter with 400", async () => {
+    await request(t.server)
+      .get(`/note/${id}/decrypt`)
+      .set("X-Forwarded-For", IP)
+      .expect(400);
+  });
+
+  it("rejects a decrypt POST without a body with 400", async () => {
+    await request(t.server)
+      .post(`/note/${id}/decrypt`)
+      .set("X-Forwarded-For", IP)
+      .expect(400);
+  });
+
   it("404s for an unknown note id", async () => {
     await request(t.server)
       .get("/note/does-not-exist/decrypt")

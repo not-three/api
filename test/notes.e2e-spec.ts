@@ -116,6 +116,24 @@ describe("notes", () => {
     });
   });
 
+  describe("POST /note/text edge cases", () => {
+    it("rejects a request without a body with 400", async () => {
+      await request(t.server)
+        .post("/note/text")
+        .set("X-Forwarded-For", IP_A)
+        .expect(400);
+    });
+
+    it("rejects an empty body with 400", async () => {
+      await request(t.server)
+        .post("/note/text")
+        .set("X-Forwarded-For", IP_A)
+        .type("text")
+        .send("")
+        .expect(400);
+    });
+  });
+
   describe("DELETE /note/:id", () => {
     it("allows deletion from the creator ip without a token", async () => {
       const { body } = await createNote();
@@ -124,6 +142,22 @@ describe("notes", () => {
         .set("X-Forwarded-For", IP_A)
         .send({})
         .expect(204);
+    });
+
+    it("allows deletion from the creator ip with no request body at all", async () => {
+      const { body } = await createNote();
+      await request(t.server)
+        .delete(`/note/${body.id}`)
+        .set("X-Forwarded-For", IP_A)
+        .expect(204);
+    });
+
+    it("rejects deletion from another ip with no request body at all", async () => {
+      const { body } = await createNote();
+      await request(t.server)
+        .delete(`/note/${body.id}`)
+        .set("X-Forwarded-For", IP_B)
+        .expect(401);
     });
 
     it("allows deletion from another ip with the delete token", async () => {
