@@ -199,3 +199,82 @@ describe("DatabaseService hard mode rate limiting", () => {
     expect(await db.getKnex()("requests").select()).toHaveLength(1);
   });
 });
+
+describe("DatabaseService hard mode note buffering", () => {
+  afterEach(async () => {
+    await cleanupEnv();
+    delete process.env.VALKEY_ENABLED;
+    delete process.env.VALKEY_FLUSH_MAX_QUEUE_SIZE;
+  });
+
+  const insertable = () => ({
+    content: "hello world",
+    ip: "1.2.3.4",
+    expires_at: Date.now() + 3_600_000,
+    self_destruct: false,
+    delete_token: null,
+    mime: null,
+  });
+
+  it("buffers creates and serves reads from the buffer", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    const id = await db.createNote(insertable());
+    expect(await db.getKnex()("notes").select()).toHaveLength(0);
+    const note = await db.getNote(id);
+    expect(note.content).toBe("hello world");
+    expect(note.id).toBe(id);
+  });
+
+  it("flushNow writes buffered notes to the database", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    const id = await db.createNote(insertable());
+    await db.flushNow();
+    const rows = await db.getKnex()("notes").select();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(id);
+    expect(await valkey.getPendingCount()).toBe(0);
+  });
+
+  it("delete before flush removes the note without touching the db", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    const id = await db.createNote(insertable());
+    await db.deleteNote(id);
+    expect(await db.getNote(id)).toBeNull();
+    await db.flushNow();
+    expect(await db.getKnex()("notes").select()).toHaveLength(0);
+  });
+
+  it("delete after flush is queued and applied on next flush", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    const id = await db.createNote(insertable());
+    await db.flushNow();
+    await db.deleteNote(id);
+    expect(await db.getNote(id)).toBeNull(); // pending delete hides it
+    await db.flushNow();
+    expect(await db.getKnex()("notes").select()).toHaveLength(0);
+  });
+
+  it("flushNow skips notes that already expired in the buffer", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    await db.createNote({ ...insertable(), expires_at: Date.now() - 1000 });
+    await db.flushNow();
+    expect(await db.getKnex()("notes").select()).toHaveLength(0);
+  });
+
+  it("cron flushes early when the queue size trigger is reached", async () => {
+    process.env.VALKEY_FLUSH_MAX_QUEUE_SIZE = "2";
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    await db.createNote(insertable());
+    await db.flushPendingWrites(); // 1 < 2 and interval not elapsed -> no flush
+    expect(await db.getKnex()("notes").select()).toHaveLength(0);
+    await db.createNote(insertable());
+    await db.flushPendingWrites(); // 2 >= 2 -> flush
+    expect(await db.getKnex()("notes").select()).toHaveLength(2);
+  });
+});

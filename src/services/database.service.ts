@@ -36,6 +36,7 @@ export class DatabaseService
   private nanoId: (size: number) => string;
   private ready = false;
   private lastCleanup = 0;
+  private lastFlush = Date.now();
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
@@ -47,8 +48,15 @@ export class DatabaseService
     this.ready = true;
   }
 
-  onModuleDestroy() {
-    this.knex.destroy();
+  async onModuleDestroy() {
+    const cfg = this.config.get();
+    if (
+      cfg.database.requestOptimization === "hard" &&
+      !cfg.childInstance &&
+      this.valkey.isEnabled()
+    )
+      await this.flushNow().catch((e) => this.logger.error(e));
+    await this.knex.destroy();
   }
 
   async onModuleInit() {
@@ -134,7 +142,12 @@ export class DatabaseService
     );
   }
 
-  getNote(id: string): Promise<Note | null> {
+  async getNote(id: string): Promise<Note | null> {
+    if (this.optimizationMode() === "hard") {
+      if (await this.valkey.isNoteDeletePending(id)) return null;
+      const buffered = await this.valkey.getBufferedNote(id);
+      if (buffered) return buffered;
+    }
     return this.getFromCache(`note-${id}`, async () => {
       const res = await this.knex("notes").where("id", id).first();
       return res
@@ -148,12 +161,28 @@ export class DatabaseService
   }
 
   async createNote(note: NoteInsert): Promise<string> {
+    if (this.optimizationMode() === "hard") {
+      const id = this.generateId();
+      const full: Note = { id, created_at: Date.now(), ...note };
+      await this.valkey.bufferNote(full);
+      this.logger.log(`Buffered note ${id}`);
+      return id;
+    }
     const res = await this.insert("notes", note);
     this.logger.log(`Created note ${res}`);
     return res;
   }
 
   async deleteNote(id: string) {
+    if (this.optimizationMode() === "hard") {
+      const wasBuffered = await this.valkey.removeBufferedNote(id);
+      if (!wasBuffered) await this.valkey.bufferNoteDelete(id);
+      await this.cache.del(`note-${id}`);
+      this.logger.log(
+        `Deleted note ${id}${wasBuffered ? " (from buffer)" : " (queued)"}`,
+      );
+      return;
+    }
     await this.knex("notes").where("id", id).del();
     await this.cache.del(`note-${id}`);
     this.logger.log(`Deleted note ${id}`);
@@ -356,6 +385,48 @@ export class DatabaseService
     ].reduce((acc, cur) => acc + cur, 0);
 
     this.logger.debug(`Finished cleanup cron job, deleted ${total} rows`);
+  }
+
+  @Cron("*/10 * * * * *")
+  async flushPendingWrites() {
+    if (!this.ready) return;
+    const cfg = this.config.get();
+    if (cfg.childInstance) return;
+    if (cfg.database.requestOptimization !== "hard") return;
+    const pending = await this.valkey.getPendingCount();
+    if (pending === 0) return;
+    const intervalMs = cfg.valkey.flushIntervalSeconds * 1000;
+    if (
+      pending < cfg.valkey.flushMaxQueueSize &&
+      !intervalElapsed(this.lastFlush, Date.now(), intervalMs)
+    )
+      return;
+    await this.flushNow();
+  }
+
+  async flushNow() {
+    this.lastFlush = Date.now();
+    const { notes, deletes } = await this.valkey.drainPending();
+    const now = Date.now();
+    const toInsert = notes.filter((n) => n.expires_at > now);
+    try {
+      if (toInsert.length) await this.knex.batchInsert("notes", toInsert);
+    } catch {
+      // batch failed (e.g. a single conflicting row) -> insert row by row
+      for (const note of toInsert) {
+        try {
+          await this.knex("notes").insert(note);
+        } catch (e) {
+          this.logger.error(`Failed to flush note ${note.id}`);
+          this.logger.error((e as Error)?.stack ?? e);
+        }
+      }
+    }
+    if (deletes.length) await this.knex("notes").whereIn("id", deletes).del();
+    if (toInsert.length || deletes.length)
+      this.logger.log(
+        `Flushed ${toInsert.length} notes and ${deletes.length} deletes to the database`,
+      );
   }
 
   getStats(): Promise<StatsResponse> {
