@@ -46,7 +46,10 @@ function DefaultDecorator(json: boolean, description?: string) {
 
 function DecryptDecorator() {
   return applyDecorators(
-    ErrorDecorator(HttpStatus.BAD_REQUEST, "The key is too long"),
+    ErrorDecorator(
+      HttpStatus.BAD_REQUEST,
+      "The key is missing, sent more than once or too long",
+    ),
     ErrorDecorator(HttpStatus.UNAUTHORIZED, "The decryption key is invalid"),
     DefaultDecorator(false, "The decrypted content of the note"),
   );
@@ -90,9 +93,18 @@ export class FetchController {
 
   private async getDecrypted(
     id: string,
-    key: string,
+    key: unknown,
     req: Request,
   ): Promise<string> {
+    // The key is not necessarily a string: express turns a repeated query
+    // parameter (?key=a&key=b) into an array, and a request without a key at
+    // all leaves it undefined. Checking `.length` on either would silently
+    // bypass the limit below, so validate the type first.
+    if (typeof key !== "string")
+      throw new HttpException(
+        "The key must be sent exactly once",
+        HttpStatus.BAD_REQUEST,
+      );
     if (key.length > 32)
       throw new HttpException("The key is too long", HttpStatus.BAD_REQUEST);
     const note = await this.db.getNote(id);
@@ -110,7 +122,7 @@ export class FetchController {
   @DecryptDecorator()
   getDecryptedQuery(
     @Param("id") id: string,
-    @Query("key") key: string,
+    @Query("key") key: unknown,
     @Req() req: Request,
   ): Promise<string> {
     return this.getDecrypted(id, key, req);
@@ -123,9 +135,9 @@ export class FetchController {
   @DecryptDecorator()
   getDecryptedBody(
     @Param("id") id: string,
-    @RawBody() key: Buffer,
+    @RawBody() key: Buffer | undefined,
     @Req() req: RawBodyRequest<Request>,
   ): Promise<string> {
-    return this.getDecrypted(id, key.toString(), req);
+    return this.getDecrypted(id, key?.toString(), req);
   }
 }
