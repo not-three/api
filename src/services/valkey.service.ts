@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import Valkey from "iovalkey";
 import { ConfigService } from "./config.service";
+import { Note } from "src/types/db/Note";
 
 @Injectable()
 export class ValkeyService implements OnModuleInit, OnModuleDestroy {
@@ -105,5 +106,60 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
 
   async isBanned(ip: string): Promise<boolean> {
     return (await this.getClient().exists(this.key("ban", ip))) === 1;
+  }
+
+  async bufferNote(note: Note): Promise<void> {
+    await this.getClient().hset(
+      this.key("pending", "notes"),
+      note.id,
+      JSON.stringify(note),
+    );
+  }
+
+  async getBufferedNote(id: string): Promise<Note | null> {
+    const raw = await this.getClient().hget(this.key("pending", "notes"), id);
+    return raw ? (JSON.parse(raw) as Note) : null;
+  }
+
+  async removeBufferedNote(id: string): Promise<boolean> {
+    return (await this.getClient().hdel(this.key("pending", "notes"), id)) > 0;
+  }
+
+  async bufferNoteDelete(id: string): Promise<void> {
+    await this.getClient().sadd(this.key("pending", "note-deletes"), id);
+  }
+
+  async isNoteDeletePending(id: string): Promise<boolean> {
+    return (
+      (await this.getClient().sismember(
+        this.key("pending", "note-deletes"),
+        id,
+      )) === 1
+    );
+  }
+
+  async getPendingCount(): Promise<number> {
+    const client = this.getClient();
+    const [notes, deletes] = await Promise.all([
+      client.hlen(this.key("pending", "notes")),
+      client.scard(this.key("pending", "note-deletes")),
+    ]);
+    return notes + deletes;
+  }
+
+  async drainPending(): Promise<{ notes: Note[]; deletes: string[] }> {
+    const client = this.getClient();
+    const [rawNotes, deletes] = await Promise.all([
+      client.hgetall(this.key("pending", "notes")),
+      client.smembers(this.key("pending", "note-deletes")),
+    ]);
+    const ids = Object.keys(rawNotes);
+    if (ids.length) await client.hdel(this.key("pending", "notes"), ...ids);
+    if (deletes.length)
+      await client.srem(this.key("pending", "note-deletes"), ...deletes);
+    return {
+      notes: ids.map((id) => JSON.parse(rawNotes[id]) as Note),
+      deletes,
+    };
   }
 }

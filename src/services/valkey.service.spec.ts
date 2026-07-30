@@ -69,4 +69,50 @@ describe("ValkeyService", () => {
     await svc.ban("1.2.3.4", 60_000);
     expect(await svc.isBanned("1.2.3.4")).toBe(true);
   });
+
+  const note = (id: string) => ({
+    id,
+    content: "content-" + id,
+    ip: "1.2.3.4",
+    created_at: 1000,
+    expires_at: 2000,
+    self_destruct: false,
+    delete_token: null,
+    mime: null,
+  });
+
+  it("buffers and retrieves notes", async () => {
+    await svc.bufferNote(note("a"));
+    expect(await svc.getBufferedNote("a")).toEqual(note("a"));
+    expect(await svc.getBufferedNote("missing")).toBeNull();
+  });
+
+  it("removes buffered notes and reports whether they existed", async () => {
+    await svc.bufferNote(note("a"));
+    expect(await svc.removeBufferedNote("a")).toBe(true);
+    expect(await svc.removeBufferedNote("a")).toBe(false);
+    expect(await svc.getBufferedNote("a")).toBeNull();
+  });
+
+  it("tracks pending deletes", async () => {
+    expect(await svc.isNoteDeletePending("x")).toBe(false);
+    await svc.bufferNoteDelete("x");
+    expect(await svc.isNoteDeletePending("x")).toBe(true);
+  });
+
+  it("counts and drains pending entries", async () => {
+    await svc.bufferNote(note("a"));
+    await svc.bufferNote(note("b"));
+    await svc.bufferNoteDelete("x");
+    expect(await svc.getPendingCount()).toBe(3);
+    const drained = await svc.drainPending();
+    expect(drained.notes.map((n) => n.id).sort()).toEqual(["a", "b"]);
+    expect(drained.deletes).toEqual(["x"]);
+    expect(await svc.getPendingCount()).toBe(0);
+    expect(await svc.isNoteDeletePending("x")).toBe(false);
+  });
+
+  it("drains empty state without errors", async () => {
+    expect(await svc.drainPending()).toEqual({ notes: [], deletes: [] });
+  });
 });
