@@ -19,6 +19,13 @@ import { StatsResponse } from "src/types/api/StatsResponse";
 
 import knex from "knex";
 import { nanoId, pRetry } from "src/etc/esm-fix";
+import {
+  intervalElapsed,
+  OPTIMIZATION_PROFILES,
+  OptimizationProfile,
+  RequestOptimizationMode,
+} from "src/etc/optimization";
+import { ValkeyService } from "./valkey.service";
 
 @Injectable()
 export class DatabaseService
@@ -28,10 +35,12 @@ export class DatabaseService
   private knex: knex.Knex;
   private nanoId: (size: number) => string;
   private ready = false;
+  private lastCleanup = 0;
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly config: ConfigService,
+    private readonly valkey: ValkeyService,
   ) {}
 
   onApplicationBootstrap() {
@@ -89,11 +98,24 @@ export class DatabaseService
     return nanoId(length || this.config.get().idLength);
   }
 
-  private async getFromCache<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  private optimizationMode(): RequestOptimizationMode {
+    return this.config.get().database
+      .requestOptimization as RequestOptimizationMode;
+  }
+
+  private profile(): OptimizationProfile {
+    return OPTIMIZATION_PROFILES[this.optimizationMode()];
+  }
+
+  private async getFromCache<T>(
+    key: string,
+    fn: () => Promise<T>,
+    ttlMs?: number,
+  ): Promise<T> {
     const cached = await this.cache.get<T>(key);
     if (cached) return cached;
     const res = await fn();
-    await this.cache.set(key, res, 30_000);
+    await this.cache.set(key, res, ttlMs ?? this.profile().readCacheTtlMs);
     return res;
   }
 
@@ -175,7 +197,8 @@ export class DatabaseService
     const cache = await this.cache.get(`ban-${ip}`);
     if (cache) return true;
     const res = !!(await this.knex("bans").where("ip", ip).first());
-    if (res) await this.cache.set(`ban-${ip}`, true, 60_000);
+    if (res)
+      await this.cache.set(`ban-${ip}`, true, this.profile().banCacheTtlMs);
     return res;
   }
 
@@ -245,8 +268,14 @@ export class DatabaseService
     if (!this.ready) return;
     const cfg = this.config.get();
     if (cfg.childInstance) return;
+    const now = Date.now();
+    if (
+      !intervalElapsed(this.lastCleanup, now, this.profile().cleanupIntervalMs)
+    )
+      return;
+    this.lastCleanup = now;
     this.logger.debug("Running cleanup cron job");
-    const timestamp = Date.now();
+    const timestamp = now;
     const deletedNotes = await this.knex("notes")
       .where("expires_at", "<", timestamp)
       .del();
@@ -302,45 +331,49 @@ export class DatabaseService
   }
 
   getStats(): Promise<StatsResponse> {
-    return this.getFromCache("stats", async () => {
-      const [
-        totalNotes,
-        requestsInLastMinute,
-        notExpiredFailedRequests,
-        currentUploadingFiles,
-        currentFiles,
-        bannedIps,
-      ] = await Promise.all(
-        [
-          this.knex("notes").count("id as count").first(),
-          this.knex("requests")
-            .where("failed", false)
-            .count("id as count")
-            .first(),
-          this.knex("requests")
-            .where("failed", true)
-            .count("id as count")
-            .first(),
-          this.knex("files")
-            .whereNot("upload_id", null)
-            .count("id as count")
-            .first(),
-          this.knex("files")
-            .where("upload_id", null)
-            .count("id as count")
-            .first(),
-          this.knex("bans").count("ip as count").first(),
-        ].map((p) => p.then((r) => Number(r.count))),
-      );
-      return {
-        time: Math.round(Date.now() / 1000),
-        totalNotes,
-        requestsInLastMinute,
-        notExpiredFailedRequests,
-        currentUploadingFiles,
-        currentFiles,
-        bannedIps,
-      };
-    });
+    return this.getFromCache(
+      "stats",
+      async () => {
+        const [
+          totalNotes,
+          requestsInLastMinute,
+          notExpiredFailedRequests,
+          currentUploadingFiles,
+          currentFiles,
+          bannedIps,
+        ] = await Promise.all(
+          [
+            this.knex("notes").count("id as count").first(),
+            this.knex("requests")
+              .where("failed", false)
+              .count("id as count")
+              .first(),
+            this.knex("requests")
+              .where("failed", true)
+              .count("id as count")
+              .first(),
+            this.knex("files")
+              .whereNot("upload_id", null)
+              .count("id as count")
+              .first(),
+            this.knex("files")
+              .where("upload_id", null)
+              .count("id as count")
+              .first(),
+            this.knex("bans").count("ip as count").first(),
+          ].map((p) => p.then((r) => Number(r.count))),
+        );
+        return {
+          time: Math.round(Date.now() / 1000),
+          totalNotes,
+          requestsInLastMinute,
+          notExpiredFailedRequests,
+          currentUploadingFiles,
+          currentFiles,
+          bannedIps,
+        };
+      },
+      this.profile().statsCacheTtlMs,
+    );
   }
 }

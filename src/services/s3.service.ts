@@ -15,6 +15,11 @@ import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { Cron } from "@nestjs/schedule";
 import { DatabaseService } from "./database.service";
+import {
+  intervalElapsed,
+  OPTIMIZATION_PROFILES,
+  RequestOptimizationMode,
+} from "src/etc/optimization";
 
 @Injectable()
 export class S3Service implements OnModuleInit {
@@ -22,6 +27,7 @@ export class S3Service implements OnModuleInit {
   private client: S3Client | null = null;
   private publicClient: S3Client | null = null;
   private bucket = "files";
+  private lastCleanup = 0;
 
   constructor(
     private readonly cfg: ConfigService,
@@ -179,6 +185,14 @@ export class S3Service implements OnModuleInit {
     if (!this.client) return;
     const cfg = this.cfg.get();
     if (cfg.childInstance) return;
+    const profile =
+      OPTIMIZATION_PROFILES[
+        cfg.database.requestOptimization as RequestOptimizationMode
+      ];
+    const now = Date.now();
+    if (!intervalElapsed(this.lastCleanup, now, profile.cleanupIntervalMs))
+      return;
+    this.lastCleanup = now;
     this.logger.debug("Running cleanup cron job");
     let aborted = 0;
     let deleted = 0;
