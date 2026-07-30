@@ -24,6 +24,7 @@
 <a href="#mode" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>mode</span></a>
 <a href="#password" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>password</span></a>
 <a href="#port" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>port</span></a>
+<a href="#requestoptimization" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>request<wbr/>Optimization</span></a>
 <a href="#ssl" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl</span></a>
 <a href="#sslrejectunauthorized" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl<wbr/>Reject<wbr/>Unauthorized</span></a>
 <a href="#user" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>user</span></a>
@@ -134,18 +135,42 @@ Be aware that this can lead to data loss. Make sure to have backups.</p>
 <h4 class="tsd-anchor-link" id="env-6">Env<a href="#env-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_PORT</p>
 </div></div></section>
 <section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="requestoptimization"><span>request<wbr/>Optimization</span><a href="#requestoptimization" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">requestOptimization</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> = ...</span></div>
+<div class="tsd-comment tsd-typography"><p>Reduce the amount of database requests, so serverless databases
+(e.g. neon.tech) can go to sleep when the instance is idle.
+'none' keeps the current behavior.
+'light' extends internal cache lifetimes and slows down the cleanup
+schedulers, so the database is only woken up every few minutes.
+'hard' additionally moves rate limit tracking into valkey and buffers
+new notes in valkey, writing them to the database in batches.
+'hard' requires VALKEY_ENABLED=true, otherwise the app will not start.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-default">
+<h4 class="tsd-anchor-link" id="default-7">Default<a href="#default-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-1">&#39;none&#39;</span>
+</code><button type="button">Copy</button></pre>
+
+</div>
+<div class="tsd-tag-values">
+<h4 class="tsd-anchor-link" id="values-1">Values<a href="#values-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>'none', 'light', 'hard'</p>
+</div>
+<div class="tsd-tag-env">
+<h4 class="tsd-anchor-link" id="env-7">Env<a href="#env-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_REQUEST_OPTIMIZATION</p>
+</div></div></section>
+<section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssl"><span>ssl</span><a href="#ssl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">ssl</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol"> = ...</span></div>
 <div class="tsd-comment tsd-typography"><p>Use SSL for the database connection.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-default">
-<h4 class="tsd-anchor-link" id="default-7">Default<a href="#default-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">false</span>
+<h4 class="tsd-anchor-link" id="default-8">Default<a href="#default-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">false</span>
 </code><button type="button">Copy</button></pre>
 
 </div>
 <div class="tsd-tag-env">
-<h4 class="tsd-anchor-link" id="env-7">Env<a href="#env-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_SSL</p>
+<h4 class="tsd-anchor-link" id="env-8">Env<a href="#env-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_SSL</p>
 </div></div></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sslrejectunauthorized"><span>ssl<wbr/>Reject<wbr/>Unauthorized</span><a href="#sslrejectunauthorized" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
@@ -154,12 +179,12 @@ Be aware that this can lead to data loss. Make sure to have backups.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-default">
-<h4 class="tsd-anchor-link" id="default-8">Default<a href="#default-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">true</span>
+<h4 class="tsd-anchor-link" id="default-9">Default<a href="#default-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">true</span>
 </code><button type="button">Copy</button></pre>
 
 </div>
 <div class="tsd-tag-env">
-<h4 class="tsd-anchor-link" id="env-8">Env<a href="#env-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_SSL_REJECT_UNAUTHORIZED</p>
+<h4 class="tsd-anchor-link" id="env-9">Env<a href="#env-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_SSL_REJECT_UNAUTHORIZED</p>
 </div></div></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="user"><span>user</span><a href="#user" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
@@ -168,12 +193,12 @@ Be aware that this can lead to data loss. Make sure to have backups.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-default">
-<h4 class="tsd-anchor-link" id="default-9">Default<a href="#default-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-1">&#39;username&#39;</span>
+<h4 class="tsd-anchor-link" id="default-10">Default<a href="#default-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-1">&#39;username&#39;</span>
 </code><button type="button">Copy</button></pre>
 
 </div>
 <div class="tsd-tag-env">
-<h4 class="tsd-anchor-link" id="env-9">Env<a href="#env-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_USERNAME</p>
+<h4 class="tsd-anchor-link" id="env-10">Env<a href="#env-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>DATABASE_USERNAME</p>
 </div></div></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
@@ -191,7 +216,7 @@ Be aware that this can lead to data loss. Make sure to have backups.</p>
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#allowrevertingmigrations"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>allow<wbr/>Reverting<wbr/>Migrations</span></a><a href="#database"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>database</span></a><a href="#filename"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>filename</span></a><a href="#host"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>host</span></a><a href="#mode"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>mode</span></a><a href="#password"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>password</span></a><a href="#port"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>port</span></a><a href="#ssl"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl</span></a><a href="#sslrejectunauthorized"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl<wbr/>Reject<wbr/>Unauthorized</span></a><a href="#user"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>user</span></a></div></details></div></details></div>
+<div><a href="#allowrevertingmigrations"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>allow<wbr/>Reverting<wbr/>Migrations</span></a><a href="#database"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>database</span></a><a href="#filename"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>filename</span></a><a href="#host"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>host</span></a><a href="#mode"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>mode</span></a><a href="#password"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>password</span></a><a href="#port"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>port</span></a><a href="#requestoptimization"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>request<wbr/>Optimization</span></a><a href="#ssl"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl</span></a><a href="#sslrejectunauthorized"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ssl<wbr/>Reject<wbr/>Unauthorized</span></a><a href="#user"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>user</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@not3/api</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
