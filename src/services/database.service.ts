@@ -236,7 +236,7 @@ export class DatabaseService
 
   async getUploadFilesLastUpdatedBefore(timestamp: number): Promise<File[]> {
     return await this.knex("files")
-      .where("upload_id", "!=", null)
+      .whereNotNull("upload_id")
       .andWhere("updated_at", "<", timestamp);
   }
 
