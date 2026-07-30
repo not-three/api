@@ -160,16 +160,26 @@ export class DatabaseService
   }
 
   async getTokens(ip: string): Promise<number> {
+    if (this.optimizationMode() === "hard") return this.valkey.getTokens(ip);
     const res = await this.knex("tokens").where("ip", ip).select("used");
     return res.reduce((acc, cur) => acc + cur.used, 0);
   }
 
   async createToken(ip: string, used: number): Promise<void> {
-    await this.insert("tokens", { ip, used });
+    if (this.optimizationMode() === "hard") {
+      await this.valkey.createToken(
+        ip,
+        used,
+        this.config.get().limits.tokensExpireAfterMinutes * 60_000,
+      );
+    } else {
+      await this.insert("tokens", { ip, used });
+    }
     this.logger.debug(`Created token for ${ip} with used=${used}`);
   }
 
   async getRequests(ip: string): Promise<{ total: number; failed: number }> {
+    if (this.optimizationMode() === "hard") return this.valkey.getRequests(ip);
     const res = await Promise.all([
       this.knex("requests")
         .where("ip", ip)
@@ -189,11 +199,22 @@ export class DatabaseService
   }
 
   async createRequest(ip: string, failed: boolean): Promise<void> {
-    await this.insert("requests", { ip, failed });
+    if (this.optimizationMode() === "hard") {
+      const limits = this.config.get().limits;
+      await this.valkey.createRequest(
+        ip,
+        failed,
+        60_000,
+        limits.banFailedRequestsResetAfterMinutes * 60_000,
+      );
+    } else {
+      await this.insert("requests", { ip, failed });
+    }
     this.logger.debug(`Created request for ${ip} with failed=${failed}`);
   }
 
   async isBanned(ip: string): Promise<boolean> {
+    if (this.optimizationMode() === "hard") return this.valkey.isBanned(ip);
     const cache = await this.cache.get(`ban-${ip}`);
     if (cache) return true;
     const res = !!(await this.knex("bans").where("ip", ip).first());
@@ -203,7 +224,14 @@ export class DatabaseService
   }
 
   async ban(ip: string) {
-    await this.knex("bans").insert({ ip, created_at: Date.now() });
+    if (this.optimizationMode() === "hard") {
+      await this.valkey.ban(
+        ip,
+        this.config.get().limits.banDurationMinutes * 60_000,
+      );
+    } else {
+      await this.knex("bans").insert({ ip, created_at: Date.now() });
+    }
     this.logger.warn(`Banned ${ip}`);
   }
 

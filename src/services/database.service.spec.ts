@@ -1,6 +1,41 @@
 import { DatabaseService } from "./database.service";
 import { MigrationService } from "./migration.service";
 import { ConfigService } from "./config.service";
+import { ValkeyService } from "./valkey.service";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const RedisMock = require("ioredis-mock");
+
+class TestValkeyService extends ValkeyService {
+  protected createClient() {
+    return new RedisMock();
+  }
+}
+
+// Everything created through makeValkey/setupDb is registered here and torn
+// down in afterEach. Cleaning up at the end of a test body instead would be
+// skipped on a failing assertion, leaving the valkey client and the knex pool
+// open — jest would then never exit.
+const opened: { destroy: () => void | Promise<any> }[] = [];
+
+const closeOpened = async () => {
+  // Reverse order: the database service depends on valkey, so it has to shut
+  // down (and flush) before the valkey client goes away.
+  for (const resource of opened.splice(0).reverse()) {
+    try {
+      await resource.destroy();
+    } catch {
+      // teardown is best effort
+    }
+  }
+};
+
+const makeValkey = async () => {
+  process.env.VALKEY_ENABLED = "true";
+  const valkey = new TestValkeyService(new ConfigService());
+  await valkey.onModuleInit();
+  opened.push({ destroy: () => valkey.onModuleDestroy() });
+  return valkey;
+};
 
 export const makeCacheStub = () => {
   const map = new Map<string, any>();
@@ -31,12 +66,14 @@ export const setupDb = async (
   const cache = makeCacheStub();
   const db = new DatabaseService(cache as any, config, valkey);
   await db.onModuleInit();
+  opened.push({ destroy: () => db.onModuleDestroy() });
   await new MigrationService(db, config).onApplicationBootstrap();
   db.onApplicationBootstrap();
   return { db, cache, config };
 };
 
-const cleanupEnv = () => {
+const cleanupEnv = async () => {
+  await closeOpened();
   delete process.env.DATABASE_MODE;
   delete process.env.DATABASE_FILE;
   delete process.env.DATABASE_REQUEST_OPTIMIZATION;
@@ -58,7 +95,6 @@ describe("DatabaseService optimization profiles", () => {
     await db.getNote(id);
     const call = cache.setCalls.find((c) => c.key === `note-${id}`);
     expect(call.ttl).toBe(30_000);
-    await db.onModuleDestroy();
   });
 
   it("caches note reads for 5min in light mode", async () => {
@@ -74,7 +110,6 @@ describe("DatabaseService optimization profiles", () => {
     await db.getNote(id);
     const call = cache.setCalls.find((c) => c.key === `note-${id}`);
     expect(call.ttl).toBe(300_000);
-    await db.onModuleDestroy();
   });
 
   it("caches stats for 5min in light mode", async () => {
@@ -82,7 +117,6 @@ describe("DatabaseService optimization profiles", () => {
     await db.getStats();
     const call = cache.setCalls.find((c) => c.key === "stats");
     expect(call.ttl).toBe(300_000);
-    await db.onModuleDestroy();
   });
 
   it("runs cleanup every tick in none mode", async () => {
@@ -107,7 +141,6 @@ describe("DatabaseService optimization profiles", () => {
     });
     await db.cleanUp();
     expect(await knex("notes").select()).toHaveLength(0);
-    await db.onModuleDestroy();
   });
 
   it("skips cleanup within the interval in light mode", async () => {
@@ -124,6 +157,45 @@ describe("DatabaseService optimization profiles", () => {
     });
     await db.cleanUp(); // within 15min window -> must skip
     expect(await knex("notes").select()).toHaveLength(1);
-    await db.onModuleDestroy();
+  });
+});
+
+describe("DatabaseService hard mode rate limiting", () => {
+  afterEach(async () => {
+    await cleanupEnv();
+    delete process.env.VALKEY_ENABLED;
+  });
+
+  it("tracks requests in valkey, not the database", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    await db.createRequest("1.2.3.4", false);
+    await db.createRequest("1.2.3.4", true);
+    expect(await db.getRequests("1.2.3.4")).toEqual({ total: 2, failed: 1 });
+    expect(await db.getKnex()("requests").select()).toHaveLength(0);
+  });
+
+  it("tracks tokens in valkey, not the database", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    await db.createToken("1.2.3.4", 1000);
+    await db.createToken("1.2.3.4", 234);
+    expect(await db.getTokens("1.2.3.4")).toBe(1234);
+    expect(await db.getKnex()("tokens").select()).toHaveLength(0);
+  });
+
+  it("tracks bans in valkey, not the database", async () => {
+    const valkey = await makeValkey();
+    const { db } = await setupDb("hard", valkey);
+    expect(await db.isBanned("1.2.3.4")).toBe(false);
+    await db.ban("1.2.3.4");
+    expect(await db.isBanned("1.2.3.4")).toBe(true);
+    expect(await db.getKnex()("bans").select()).toHaveLength(0);
+  });
+
+  it("keeps rate limiting in the database in light mode", async () => {
+    const { db } = await setupDb("light");
+    await db.createRequest("1.2.3.4", false);
+    expect(await db.getKnex()("requests").select()).toHaveLength(1);
   });
 });
