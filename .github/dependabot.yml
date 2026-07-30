@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      # pnpm's minimumReleaseAge policy (1 day) rejects lockfile entries
+      # published less than 24h ago; keep dependabot behind that window.
+      default-days: 2
     ignore:
       # TS 7.0 ships only the tsc executable; the compiler API that the Nest
       # CLI, typescript-eslint, ts-jest etc. need returns with TS 7.1.
