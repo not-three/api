@@ -37,7 +37,7 @@ describe("ValkeyService", () => {
   });
 
   afterEach(async () => {
-    await svc.onModuleDestroy();
+    await svc.onApplicationShutdown();
   });
 
   it("reports enabled state", () => {

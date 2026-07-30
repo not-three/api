@@ -33,7 +33,7 @@ const makeValkey = async () => {
   process.env.VALKEY_ENABLED = "true";
   const valkey = new TestValkeyService(new ConfigService());
   await valkey.onModuleInit();
-  opened.push({ destroy: () => valkey.onModuleDestroy() });
+  opened.push({ destroy: () => valkey.onApplicationShutdown() });
   return valkey;
 };
 

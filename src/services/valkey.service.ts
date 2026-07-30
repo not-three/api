@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleDestroy,
+  OnApplicationShutdown,
   OnModuleInit,
 } from "@nestjs/common";
 import Valkey from "iovalkey";
@@ -9,7 +9,7 @@ import { ConfigService } from "./config.service";
 import { Note } from "src/types/db/Note";
 
 @Injectable()
-export class ValkeyService implements OnModuleInit, OnModuleDestroy {
+export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(ValkeyService.name);
   private client: Valkey | null = null;
 
@@ -47,8 +47,15 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
-    if (this.client) await this.client.quit();
+  // Disconnecting happens on application shutdown rather than in
+  // onModuleDestroy: nest runs every onModuleDestroy hook first, and
+  // DatabaseService flushes its valkey-backed write buffer in one of them.
+  // Closing the client earlier would make that flush fail.
+  async onApplicationShutdown() {
+    if (this.client) {
+      await this.client.quit();
+      this.client = null;
+    }
   }
 
   isEnabled(): boolean {
