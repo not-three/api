@@ -95,8 +95,8 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
       iovalkey:
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.3.3
+        version: 0.3.3
       ip-regex:
         specifier: ^5.0.0
         version: 5.0.0
@@ -2387,10 +2387,6 @@ packages:
 
   iovalkey@0.3.3:
     resolution: {integrity: sha512-4rTJX6Q5wTYEvxboXi8DsEiUo+OvqJGtLYOSGm37KpdRXsG5XJjbVtYKGJpPSWP+QT7rWscA4vsrdmzbEbenpw==}
-    engines: {node: '>=18.12.0'}
-
-  iovalkey@0.4.0:
-    resolution: {integrity: sha512-OSUKxJ+s44CLdUTaicX4+pVrBN/zHKIYwr2oKhRDuczr19FwcSCXEZHzcMUYWZNh1mNSCV9bNJHW/T6cHVm9Aw==}
     engines: {node: '>=18.12.0'}
 
   ip-regex@5.0.0:
@@ -6413,20 +6409,6 @@ snapshots:
       - supports-color
 
   iovalkey@0.3.3:
-    dependencies:
-      '@iovalkey/commands': 0.1.0
-      cluster-key-slot: 1.1.2
-      debug: 4.4.3
-      denque: 2.1.0
-      lodash.defaults: 4.2.0
-      lodash.isarguments: 3.1.0
-      redis-errors: 1.2.0
-      redis-parser: 3.0.0
-      standard-as-callback: 2.1.0
-    transitivePeerDependencies:
-      - supports-color
-
-  iovalkey@0.4.0:
     dependencies:
       '@iovalkey/commands': 0.1.0
       cluster-key-slot: 1.1.2
