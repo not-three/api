@@ -62,6 +62,19 @@ export class MigrationService implements OnApplicationBootstrap {
         ].join(this.breakString),
       });
     },
+    async (knex) => {
+      await knex.schema.alterTable("files", (table) => {
+        table.string("upload_id", 1024).nullable().alter();
+      });
+      await knex("migrations").insert({
+        id: 2,
+        revert: knex.schema
+          .alterTable("files", (table) => {
+            table.string("upload_id", 128).nullable().alter();
+          })
+          .toString(),
+      });
+    },
   ];
 
   async onApplicationBootstrap() {
