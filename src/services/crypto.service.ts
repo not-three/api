@@ -3,9 +3,13 @@ import CryptoJS from "crypto-js";
 
 @Injectable()
 export class CryptoService {
-  decrypt(key: string, data: string): string {
+  decrypt(content: string, key: string): string {
     try {
-      return CryptoJS.AES.decrypt(data, key).toString(CryptoJS.enc.Utf8);
+      const result = CryptoJS.AES.decrypt(content, key).toString(
+        CryptoJS.enc.Utf8,
+      );
+      if (!result) throw new Error("empty result");
+      return result;
     } catch {
       throw new HttpException(
         "The decryption key is invalid",

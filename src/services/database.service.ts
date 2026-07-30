@@ -218,6 +218,7 @@ export class DatabaseService
 
   async deleteFile(id: string): Promise<void> {
     await this.knex("files").where("id", id).del();
+    await this.cache.del(`file-${id}`);
     this.logger.log(`Deleted file ${id}`);
   }
 
@@ -235,7 +236,7 @@ export class DatabaseService
 
   async getUploadFilesLastUpdatedBefore(timestamp: number): Promise<File[]> {
     return await this.knex("files")
-      .where("upload_id", "!=", null)
+      .whereNotNull("upload_id")
       .andWhere("updated_at", "<", timestamp);
   }
 

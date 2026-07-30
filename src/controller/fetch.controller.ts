@@ -2,6 +2,7 @@ import {
   applyDecorators,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
@@ -95,6 +96,8 @@ export class FetchController {
     if (key.length > 32)
       throw new HttpException("The key is too long", HttpStatus.BAD_REQUEST);
     const note = await this.db.getNote(id);
+    if (!note)
+      throw new HttpException("The note was not found", HttpStatus.NOT_FOUND);
     await this.db.createToken(
       await getIp(req),
       Buffer.byteLength(note.content, "utf8"),
@@ -114,6 +117,7 @@ export class FetchController {
   }
 
   @Post("decrypt")
+  @HttpCode(HttpStatus.OK)
   @ApiBody({ type: String, description: "The decryption key for the note" })
   @ApiConsumes("text/plain")
   @DecryptDecorator()
