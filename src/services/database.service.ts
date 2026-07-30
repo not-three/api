@@ -218,6 +218,7 @@ export class DatabaseService
 
   async deleteFile(id: string): Promise<void> {
     await this.knex("files").where("id", id).del();
+    await this.cache.del(`file-${id}`);
     this.logger.log(`Deleted file ${id}`);
   }
 

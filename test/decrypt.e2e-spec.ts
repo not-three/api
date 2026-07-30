@@ -35,14 +35,12 @@ describe("note decryption", () => {
   });
 
   it("decrypts via raw body", async () => {
-    // The handler has no @HttpCode, so Nest returns its POST default of 201
-    // even though swagger documents 200. 201 is the current actual behavior.
     const res = await request(t.server)
       .post(`/note/${id}/decrypt`)
       .set("X-Forwarded-For", IP)
       .type("text")
       .send("pw123")
-      .expect(201);
+      .expect(200);
     expect(res.text).toBe("top secret");
   });
 

@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
@@ -183,7 +184,7 @@ export class FilesController {
         "The part query parameter must be a positive number",
         HttpStatus.BAD_REQUEST,
       );
-    this.db.updateFile(id, { part: totalPart });
+    await this.db.updateFile(id, { part: totalPart });
     const key = `${file.id}/${file.name}`;
     return {
       url: await this.s3.createUploadPartUrl(
@@ -196,6 +197,7 @@ export class FilesController {
   }
 
   @Put("upload/:id")
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBody({ type: FileCloseUploadRequest })
   @ApiResponse({
     status: HttpStatus.NO_CONTENT,

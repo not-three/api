@@ -2,6 +2,7 @@ import {
   applyDecorators,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
@@ -116,6 +117,7 @@ export class FetchController {
   }
 
   @Post("decrypt")
+  @HttpCode(HttpStatus.OK)
   @ApiBody({ type: String, description: "The decryption key for the note" })
   @ApiConsumes("text/plain")
   @DecryptDecorator()
