@@ -262,14 +262,17 @@ export class FilesController {
   @DefaultDecorator(true, false, false)
   async downloadFile(
     @Param("id") id: string,
-    @Query("json") json: string,
+    @Query("json") json: unknown,
     @Res() res: Response,
   ): Promise<void> {
     const file = await this.db.getFile(id);
     if (!file)
       throw new HttpException("The file was not found", HttpStatus.NOT_FOUND);
     const url = await this.s3.createDownloadUrl(`${id}/${file.name}`);
-    if ((json || "").toLowerCase() !== "true") res.redirect(302, url);
+    // A repeated query parameter arrives as an array, so check the type before
+    // treating it as a string. Anything but "true" keeps the redirect default.
+    const wantsJson = typeof json === "string" && json.toLowerCase() === "true";
+    if (!wantsJson) res.redirect(302, url);
     else
       res.json({
         url,

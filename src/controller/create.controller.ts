@@ -109,19 +109,24 @@ export class CreateController {
   @ApiProduces("text/plain")
   @GlobalDecorator()
   async createFromText(
-    @RawBody() body: Buffer,
+    @RawBody() body: Buffer | undefined,
     @Req() req: RawBodyRequest<Request>,
   ): Promise<string> {
     const ip = await getIp(req);
     const limits = this.cfg.get().limits;
 
-    let cost = Buffer.byteLength(body, "utf8");
-    if (cost < limits.minTokensPerCreate) cost = limits.minTokensPerCreate;
-    if (cost === 0)
+    // A request without a body leaves this undefined. Check for emptiness
+    // before applying the minimum cost below, which would otherwise lift the
+    // cost above zero and let an empty note through.
+    const content = body?.toString("utf8") ?? "";
+    if (!content)
       throw new HttpException(
         "The note must not be empty",
         HttpStatus.BAD_REQUEST,
       );
+
+    let cost = Buffer.byteLength(content, "utf8");
+    if (cost < limits.minTokensPerCreate) cost = limits.minTokensPerCreate;
 
     const usedTokens = await this.db.getTokens(ip);
     if (usedTokens + cost >= limits.maxTokensPerIp)
@@ -138,7 +143,7 @@ export class CreateController {
 
     const res = await Promise.all([
       this.db.createNote({
-        content: body.toString("utf8"),
+        content,
         ip,
         self_destruct: false,
         expires_at: Date.now() + limits.maxStorageTimeDays * 24 * 60 * 60_000,
