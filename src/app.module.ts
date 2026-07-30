@@ -11,6 +11,7 @@ import { DatabaseService } from "./services/database.service";
 import { CryptoService } from "./services/crypto.service";
 import { MigrationService } from "./services/migration.service";
 import { S3Service } from "./services/s3.service";
+import { ValkeyService } from "./services/valkey.service";
 
 @Module({
   imports: [ScheduleModule.forRoot(), CacheModule.register()],
@@ -23,6 +24,7 @@ import { S3Service } from "./services/s3.service";
   ],
   providers: [
     ConfigService,
+    ValkeyService,
     DatabaseService,
     CryptoService,
     MigrationService,
