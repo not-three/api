@@ -75,4 +75,23 @@ export class DatabaseConfig {
    * @env ALLOW_REVERTING_MIGRATIONS
    */
   allowRevertingMigrations = $bool("ALLOW_REVERTING_MIGRATIONS", false);
+
+  /**
+   * Reduce the amount of database requests, so serverless databases
+   * (e.g. neon.tech) can go to sleep when the instance is idle.
+   * 'none' keeps the current behavior.
+   * 'light' extends internal cache lifetimes and slows down the cleanup
+   * schedulers, so the database is only woken up every few minutes.
+   * 'hard' additionally moves rate limit tracking into valkey and buffers
+   * new notes in valkey, writing them to the database in batches.
+   * 'hard' requires VALKEY_ENABLED=true, otherwise the app will not start.
+   * @default 'none'
+   * @values 'none', 'light', 'hard'
+   * @env DATABASE_REQUEST_OPTIMIZATION
+   */
+  requestOptimization = $oneOf(
+    "DATABASE_REQUEST_OPTIMIZATION",
+    ["none", "light", "hard"],
+    "none",
+  );
 }

@@ -4,6 +4,7 @@ import { FileTransferConfig } from "./FileTransfer";
 import { LimitsConfig } from "./Limits";
 import { GetIpConfig } from "./GetIp";
 import { CorsConfig } from "./Cors";
+import { ValkeyConfig } from "./Valkey";
 
 /** @hidden */
 export const LOG_LEVEL = [
@@ -34,6 +35,9 @@ export class BaseConfig {
 
   /** @hidden */
   cors = new CorsConfig();
+
+  /** @hidden */
+  valkey = new ValkeyConfig();
 
   /**
    * The length of the IDs. Cannot be higher than 32, and should not be lower than 8.
