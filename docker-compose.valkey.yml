@@ -1,0 +1,49 @@
+# Example of an !3 api deployment with a postgres database and valkey,
+# using the 'hard' request optimization mode: rate limits live in valkey
+# and new notes are written to the database in batches, so a serverless
+# database (e.g. neon.tech) can go to sleep between batches.
+# Note: --appendonly yes enables persistence, so buffered notes survive
+# a valkey restart.
+# We still recommend checking out the more advanced examples in the main
+# repository: https://github.com/not-three/main#deployment
+
+x-restart: &restart
+  restart: 'unless-stopped'
+
+services:
+  db:
+    image: postgres:14.5
+    <<: *restart
+    environment:
+      POSTGRES_PASSWORD: db
+      POSTGRES_USER: db
+      POSTGRES_DB: db
+    volumes:
+      - pg:/var/lib/postgresql/data
+
+  valkey:
+    image: valkey/valkey:8
+    <<: *restart
+    command: valkey-server --appendonly yes
+    volumes:
+      - valkey:/data
+
+  app:
+    image: ghcr.io/not-three/api:nightly
+    <<: *restart
+    ports: [ 4000:4000 ]
+    depends_on: [ db, valkey ]
+    environment:
+      CORS_ENABLED: true
+      DATABASE_MODE: pg
+      DATABASE_HOST: db
+      DATABASE_USERNAME: db
+      DATABASE_PASSWORD: db
+      DATABASE_NAME: db
+      DATABASE_REQUEST_OPTIMIZATION: hard
+      VALKEY_ENABLED: true
+      VALKEY_HOST: valkey
+
+volumes:
+  pg:
+  valkey:
