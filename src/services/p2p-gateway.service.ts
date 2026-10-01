@@ -111,7 +111,14 @@ export class P2PGatewayService
       socket.destroy();
       return;
     }
-    if (new URL(req.url ?? "/", "http://localhost").pathname !== "/p2p") {
+    let pathname: string;
+    try {
+      pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+    if (pathname !== "/p2p") {
       socket.destroy();
       return;
     }

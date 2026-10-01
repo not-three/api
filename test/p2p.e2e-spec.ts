@@ -493,6 +493,15 @@ describe("P2P gateway", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("closes malformed upgrade targets without rejecting the handler", async () => {
+    const socket = { destroy: jest.fn() };
+    const gateway = t.app.get(P2PGatewayService);
+    await expect(
+      (gateway as any).upgrade({ url: "http://[" }, socket, Buffer.alloc(0)),
+    ).resolves.toBeUndefined();
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+  });
 });
 
 it("terminates a peer that misses heartbeat pongs and keeps responsive peers", async () => {
