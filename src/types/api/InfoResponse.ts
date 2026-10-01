@@ -1,6 +1,18 @@
 import { ApiProperty } from "@nestjs/swagger";
 
 export class InfoResponse {
+  @ApiProperty({ description: "If P2P signaling is enabled", example: false })
+  p2pEnabled: boolean;
+
+  @ApiProperty({
+    description: "If P2P room sessions are enabled",
+    example: false,
+  })
+  p2pRooms: boolean;
+
+  @ApiProperty({ description: "Maximum peers in a P2P room", example: 8 })
+  p2pRoomMaxPeers: number;
+
   @ApiProperty({
     description: [
       "The current version of the API, in semver format",

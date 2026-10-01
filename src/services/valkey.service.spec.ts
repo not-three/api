@@ -115,4 +115,134 @@ describe("ValkeyService", () => {
   it("drains empty state without errors", async () => {
     expect(await svc.drainPending()).toEqual({ notes: [], deletes: [] });
   });
+
+  it("shares P2P room membership and enforces capacity", async () => {
+    await svc.p2pRegisterSession("room", "room", "creator", 3, 60_000);
+    expect(await svc.p2pSessionExists("room")).toBe(true);
+    expect(await svc.p2pJoinSession("room", "peer-b", 60_000)).toMatchObject({
+      peers: ["creator"],
+      kind: "room",
+    });
+    expect(await svc.p2pJoinSession("room", "peer-c", 60_000)).toMatchObject({
+      peers: ["creator", "peer-b"],
+    });
+    expect(await svc.p2pJoinSession("room", "peer-d", 60_000)).toBe(
+      "session-full",
+    );
+    expect(await svc.p2pLeaveSession("room", "peer-b", 1000)).toMatchObject({
+      peers: ["creator", "peer-c"],
+    });
+    await svc.p2pDeleteSession("room");
+    expect(await svc.p2pSessionExists("room")).toBe(false);
+  });
+
+  it("publishes targeted P2P frames to another subscriber", async () => {
+    const got: object[] = [];
+    const receiver = new TestValkeyService(makeConfig());
+    await receiver.onModuleInit();
+    try {
+      await receiver.p2pSubscribe((msg) => got.push(msg));
+      await svc.p2pPublish({
+        sessionId: "s",
+        targetPeerId: "b",
+        frame: { type: "signal" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(got).toEqual([
+        { sessionId: "s", targetPeerId: "b", frame: { type: "signal" } },
+      ]);
+    } finally {
+      await receiver.onApplicationShutdown();
+    }
+  });
+
+  it("removes its P2P subscription on shutdown", async () => {
+    const base = new RedisMock();
+    class SharedValkeyService extends ValkeyService {
+      protected createClient() {
+        return base.duplicate();
+      }
+    }
+    const subscriber = new SharedValkeyService(makeConfig());
+    await subscriber.onModuleInit();
+    try {
+      await subscriber.p2pSubscribe(() => undefined);
+      expect(base.channels.listenerCount("not3:p2p:bus")).toBe(1);
+    } finally {
+      await subscriber.onApplicationShutdown();
+      expect(base.channels.listenerCount("not3:p2p:bus")).toBe(0);
+      await base.quit();
+    }
+  });
+
+  it("admits only one of two concurrent peers into the last room slot", async () => {
+    await svc.p2pRegisterSession("race", "room", "creator", 2, 60_000);
+    const results = await Promise.all([
+      svc.p2pJoinSession("race", "peer-a", 60_000),
+      svc.p2pJoinSession("race", "peer-b", 60_000),
+    ]);
+    expect(results.filter((result) => result === "session-full")).toHaveLength(
+      1,
+    );
+    expect((await svc.p2pGetSession("race"))?.peers).toHaveLength(2);
+  });
+
+  it("rejects a duplicate peer ID within a session", async () => {
+    await svc.p2pRegisterSession("peer-id", "room", "creator", 3, 60_000);
+    expect(await svc.p2pJoinSession("peer-id", "creator", 60_000)).toBe(
+      "duplicate-peer",
+    );
+    expect((await svc.p2pGetSession("peer-id"))?.peers).toEqual(["creator"]);
+  });
+
+  it("starts room grace when the final peers leave concurrently", async () => {
+    await svc.p2pRegisterSession("empty-race", "room", "creator", 3, 60_000);
+    await svc.p2pJoinSession("empty-race", "other", 60_000);
+    await Promise.all([
+      svc.p2pLeaveSession("empty-race", "creator", 10),
+      svc.p2pLeaveSession("empty-race", "other", 10),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(await svc.p2pSessionExists("empty-race")).toBe(false);
+  });
+
+  it("does not extend an empty room beyond its grace through a late touch", async () => {
+    await svc.p2pRegisterSession("late-touch", "room", "creator", 3, 60_000);
+    await svc.p2pLeaveSession("late-touch", "creator", 10);
+    await svc.p2pTouchSession("late-touch", 60_000);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(await svc.p2pSessionExists("late-touch")).toBe(false);
+  });
+
+  it("holds the creator IP quota until an empty room's grace expires", async () => {
+    const ip = "10.20.1.1";
+    expect(await svc.p2pReserveIpSession(ip, "room", 1, 40)).toBe(true);
+    await svc.p2pRegisterSession("room", "room", "creator", 3, 40, ip);
+    await svc.p2pLeaveSession("room", "creator", 200);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(await svc.p2pSessionExists("room")).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "another", 1, 40)).toBe(false);
+  });
+
+  it("does not shorten an older IP reservation when another is reserved", async () => {
+    const ip = "10.20.1.2";
+    expect(await svc.p2pReserveIpSession(ip, "older", 2, 1000)).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "newer", 2, 40)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(
+      await svc.getClient().zscore("not3:p2p:ip:" + ip, "older"),
+    ).not.toBeNull();
+  });
+
+  it("does not shorten another IP reservation when a session is touched", async () => {
+    const ip = "10.20.1.3";
+    expect(await svc.p2pReserveIpSession(ip, "older", 2, 1000)).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "touched", 2, 1000)).toBe(true);
+    await svc.p2pRegisterSession("touched", "transfer", "creator", 2, 1000, ip);
+    await svc.p2pTouchSession("touched", 40);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(
+      await svc.getClient().zscore("not3:p2p:ip:" + ip, "older"),
+    ).not.toBeNull();
+  });
 });

@@ -42,12 +42,15 @@ export class StatsController {
   @GlobalDecorator(true)
   async getInfo(@Req() req: Request): Promise<InfoResponse> {
     const used = await this.db.getTokens(await getIp(req));
-    const { limits, fileTransfer, instancePassword } = this.cfg.get();
+    const { limits, fileTransfer, instancePassword, p2p } = this.cfg.get();
     return {
       version: version,
       availableTokens: limits.maxTokensPerIp - used,
       maxStorageTimeDays: limits.maxStorageTimeDays,
       fileTransferEnabled: fileTransfer.enabled,
+      p2pEnabled: p2p.enabled,
+      p2pRooms: p2p.enabled && p2p.roomsEnabled,
+      p2pRoomMaxPeers: p2p.roomMaxPeers,
       fileTransferMaxSize: fileTransfer.maxSizeInMB,
       privateMode: !!instancePassword,
     };
