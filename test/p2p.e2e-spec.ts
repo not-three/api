@@ -517,6 +517,63 @@ describe("P2P Valkey relay", () => {
   });
 });
 
+describe("P2P rapid frames across replicas", () => {
+  const base = new RedisMock();
+  let first: TestApp, second: TestApp;
+  let ports: number[];
+  const sockets: WebSocket[] = [];
+  beforeAll(async () => {
+    const env = {
+      P2P_ENABLED: "true",
+      P2P_MAX_SESSIONS_PER_IP: "10",
+      DATABASE_REQUEST_OPTIMIZATION: "hard",
+      VALKEY_ENABLED: "false",
+    };
+    const overrides = { valkeyClientFactory: () => base.duplicate() };
+    first = await createTestApp(env, overrides);
+    second = await createTestApp(env, overrides);
+    ports = [await first.listen(), await second.listen()];
+  });
+  afterEach(() => sockets.splice(0).forEach((ws) => ws.terminate()));
+  afterAll(async () => {
+    await Promise.all([first.close(), second.close()]);
+    await base.quit();
+  });
+  const open = async (index: number, ip: string) => {
+    const ws = await connect(ports[index], ip);
+    sockets.push(ws);
+    return ws;
+  };
+
+  it("rejects a second create queued before the first Valkey write completes", async () => {
+    const peer = await open(0, "10.14.1.1");
+    send(peer, { type: "create" });
+    send(peer, { type: "create" });
+    expect((await frame(peer)).type).toBe("created");
+    expect(await frame(peer)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+  });
+
+  it("rejects a second join queued before the first Valkey write completes", async () => {
+    const owners = [await open(0, "10.14.2.1"), await open(0, "10.14.2.2")];
+    const sessions: string[] = [];
+    for (const owner of owners) {
+      send(owner, { type: "create", kind: "room" });
+      sessions.push((await frame(owner)).sessionId);
+    }
+    const peer = await open(1, "10.14.2.3");
+    send(peer, { type: "join", sessionId: sessions[0] });
+    send(peer, { type: "join", sessionId: sessions[1] });
+    expect((await frame(peer)).type).toBe("joined");
+    expect(await frame(peer)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+  });
+});
+
 it("closes active room sockets and removes Valkey membership before app shutdown", async () => {
   const base = new RedisMock();
   const env = {
@@ -565,6 +622,58 @@ it("closes active room sockets and removes Valkey membership before app shutdown
     member?.terminate();
     if (!hostClosed) await host.close();
     await guest.close();
+    await base.quit();
+  }
+});
+
+it("still closes active sockets when Valkey leave fails during shutdown", async () => {
+  const base = new RedisMock();
+  const app = await createTestApp(
+    {
+      P2P_ENABLED: "true",
+      DATABASE_REQUEST_OPTIMIZATION: "hard",
+      VALKEY_ENABLED: "false",
+    },
+    { valkeyClientFactory: () => base.duplicate() },
+  );
+  let peer: WebSocket | undefined;
+  let closed = false;
+  try {
+    const port = await app.listen();
+    peer = await connect(port, "10.15.1.1");
+    send(peer, { type: "create", kind: "room" });
+    expect((await frame(peer)).type).toBe("created");
+    const socketClosed = new Promise<string>((resolve) =>
+      peer!.once("close", () => resolve("closed")),
+    );
+    jest
+      .spyOn(app.app.get(ValkeyService), "p2pLeaveSession")
+      .mockRejectedValueOnce(new Error("Valkey unavailable"));
+    const close = app.close().then(
+      () => {
+        closed = true;
+        return "closed";
+      },
+      () => "rejected",
+    );
+    const outcome = await Promise.race([
+      close,
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("timed-out"), 300),
+      ),
+    ]);
+    expect(outcome).toBe("closed");
+    expect(
+      await Promise.race([
+        socketClosed,
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve("timed-out"), 300),
+        ),
+      ]),
+    ).toBe("closed");
+  } finally {
+    peer?.terminate();
+    if (!closed) await app.close();
     await base.quit();
   }
 });

@@ -21,6 +21,7 @@ interface PeerState {
   peerId?: string;
   messageTimes: number[];
   alive: boolean;
+  processing: Promise<void>;
 }
 
 @Injectable()
@@ -72,12 +73,22 @@ export class P2PGatewayService
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.server) this.server.off("upgrade", this.upgradeHandler);
     const peers = [...this.states.values()];
-    if (this.sessions.relayEnabled())
-      await Promise.all(
-        peers.map((state) => this.sessions.relayLeaveFor(state.handle)),
-      );
-    else for (const state of peers) this.sessions.destroyAllFor(state.handle);
-    for (const ws of this.states.keys()) ws.terminate();
+    try {
+      if (this.sessions.relayEnabled()) {
+        const results = await Promise.allSettled(
+          peers.map((state) => this.sessions.relayLeaveFor(state.handle)),
+        );
+        for (const result of results)
+          if (result.status === "rejected")
+            this.logger.warn(
+              `P2P relay cleanup failed: ${String(result.reason)}`,
+            );
+      } else {
+        for (const state of peers) this.sessions.destroyAllFor(state.handle);
+      }
+    } finally {
+      for (const ws of this.states.keys()) ws.terminate();
+    }
   }
 
   onApplicationShutdown(): void {
@@ -145,16 +156,29 @@ export class P2PGatewayService
       handle,
       messageTimes: [],
       alive: true,
+      processing: Promise.resolve(),
     };
     this.states.set(ws, state);
     ws.on("pong", () => {
       state.alive = true;
     });
     ws.on("message", (raw, binary) => {
-      void this.message(ws, state, raw, binary).catch((err) => {
-        this.logger.warn(`P2P message failed: ${(err as Error).message}`);
-        this.fail(ws, state, "invalid-message");
-      });
+      state.processing = state.processing
+        .then(async () => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          await this.message(ws, state, raw, binary);
+        })
+        .catch(async (err) => {
+          this.logger.warn(`P2P message failed: ${(err as Error).message}`);
+          try {
+            await this.fail(ws, state, "invalid-message");
+          } catch (failure) {
+            this.logger.warn(
+              `P2P error delivery failed: ${(failure as Error).message}`,
+            );
+            ws.terminate();
+          }
+        });
     });
     ws.on("close", () => {
       this.states.delete(ws);
