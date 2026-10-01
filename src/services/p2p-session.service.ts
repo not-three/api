@@ -82,26 +82,36 @@ export class P2PSessionService
     }
     const result = this.create(ip, handle, kind);
     if (result === "too-many") return result;
-    const reserved = await this.valkey!.p2pReserveIpSession(
-      ip,
-      result.session.id,
-      this.config.get().p2p.maxSessionsPerIp,
-      this.ttlMs(),
-    );
-    if (!reserved) {
+    try {
+      const reserved = await this.valkey!.p2pReserveIpSession(
+        ip,
+        result.session.id,
+        this.config.get().p2p.maxSessionsPerIp,
+        this.ttlMs(),
+      );
+      if (!reserved) {
+        this.destroy(result.session.id, false);
+        return "too-many";
+      }
+      await this.valkey!.p2pRegisterSession(
+        result.session.id,
+        kind,
+        result.peerId,
+        result.session.maxPeers,
+        this.ttlMs(),
+        ip,
+      );
+      this.attachRelay(result.session.id, result.peerId, handle);
+      return result;
+    } catch (err) {
       this.destroy(result.session.id, false);
-      return "too-many";
+      try {
+        await this.valkey!.p2pDeleteSession(result.session.id, ip);
+      } catch (cleanupErr) {
+        this.logger.warn(`P2P create rollback failed: ${String(cleanupErr)}`);
+      }
+      throw err;
     }
-    await this.valkey!.p2pRegisterSession(
-      result.session.id,
-      kind,
-      result.peerId,
-      result.session.maxPeers,
-      this.ttlMs(),
-      ip,
-    );
-    this.attachRelay(result.session.id, result.peerId, handle);
-    return result;
   }
 
   async relayJoin(
@@ -114,25 +124,41 @@ export class P2PSessionService
   > {
     for (let attempt = 0; attempt < 5; attempt++) {
       const peerId = nanoId(12);
-      const joined = await this.valkey!.p2pJoinSession(
-        id,
-        peerId,
-        this.ttlMs(),
-      );
-      if (joined === "duplicate-peer") continue;
-      if (typeof joined === "string") return joined;
-      this.attachRelay(id, peerId, handle);
-      for (const targetPeerId of joined.peers)
-        await this.publishRelay(id, targetPeerId, {
-          type: "peer-joined",
+      try {
+        const joined = await this.valkey!.p2pJoinSession(
+          id,
           peerId,
-        });
-      this.touch(id);
-      return {
-        kind: joined.kind,
-        peerId,
-        peers: joined.kind === "room" ? joined.peers : [],
-      };
+          this.ttlMs(),
+        );
+        if (joined === "duplicate-peer") continue;
+        if (typeof joined === "string") return joined;
+        this.attachRelay(id, peerId, handle);
+        for (const targetPeerId of joined.peers)
+          await this.publishRelay(id, targetPeerId, {
+            type: "peer-joined",
+            peerId,
+          });
+        this.touch(id);
+        return {
+          kind: joined.kind,
+          peerId,
+          peers: joined.kind === "room" ? joined.peers : [],
+        };
+      } catch (err) {
+        try {
+          await this.valkey!.p2pLeaveSession(
+            id,
+            peerId,
+            this.config.get().p2p.roomGraceSeconds * 1000,
+          );
+        } catch (cleanupErr) {
+          this.logger.warn(`P2P join rollback failed: ${String(cleanupErr)}`);
+        }
+        const local = this.relayPeers.get(id);
+        local?.delete(peerId);
+        if (local && !local.size) this.relayPeers.delete(id);
+        throw err;
+      }
     }
     throw new Error("Could not allocate a unique P2P peer ID");
   }
@@ -161,13 +187,14 @@ export class P2PSessionService
 
   async relayLeave(id: string, peerId: string): Promise<void> {
     const local = this.relayPeers.get(id);
-    if (!local?.delete(peerId)) return;
-    if (!local.size) this.relayPeers.delete(id);
+    if (!local?.has(peerId)) return;
     const updated = await this.valkey!.p2pLeaveSession(
       id,
       peerId,
       this.config.get().p2p.roomGraceSeconds * 1000,
     );
+    local.delete(peerId);
+    if (!local.size) this.relayPeers.delete(id);
     if (updated)
       for (const targetPeerId of updated.peers)
         await this.publishRelay(id, targetPeerId, {

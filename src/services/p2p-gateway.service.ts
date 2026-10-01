@@ -22,6 +22,7 @@ interface PeerState {
   messageTimes: number[];
   alive: boolean;
   processing: Promise<void>;
+  cleanup?: Promise<void>;
 }
 
 @Injectable()
@@ -36,6 +37,7 @@ export class P2PGatewayService
   private wss?: WebSocketServer;
   private heartbeat?: ReturnType<typeof setInterval>;
   private readonly states = new Map<WebSocket, PeerState>();
+  private stopping = false;
   private upgradeHandler = (
     req: IncomingMessage,
     socket: Socket,
@@ -70,25 +72,17 @@ export class P2PGatewayService
   }
 
   async beforeApplicationShutdown(): Promise<void> {
+    this.stopping = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.server) this.server.off("upgrade", this.upgradeHandler);
-    const peers = [...this.states.values()];
-    try {
-      if (this.sessions.relayEnabled()) {
-        const results = await Promise.allSettled(
-          peers.map((state) => this.sessions.relayLeaveFor(state.handle)),
-        );
-        for (const result of results)
-          if (result.status === "rejected")
-            this.logger.warn(
-              `P2P relay cleanup failed: ${String(result.reason)}`,
-            );
-      } else {
-        for (const state of peers) this.sessions.destroyAllFor(state.handle);
-      }
-    } finally {
-      for (const ws of this.states.keys()) ws.terminate();
-    }
+    const peers = [...this.states];
+    for (const [ws] of peers) ws.terminate();
+    const results = await Promise.allSettled(
+      peers.map(([ws, state]) => this.cleanupState(ws, state)),
+    );
+    for (const result of results)
+      if (result.status === "rejected")
+        this.logger.warn(`P2P relay cleanup failed: ${String(result.reason)}`);
   }
 
   onApplicationShutdown(): void {
@@ -107,6 +101,10 @@ export class P2PGatewayService
     socket: Socket,
     head: Buffer,
   ): Promise<void> {
+    if (this.stopping) {
+      socket.destroy();
+      return;
+    }
     if (new URL(req.url ?? "/", "http://localhost").pathname !== "/p2p") {
       socket.destroy();
       return;
@@ -135,9 +133,14 @@ export class P2PGatewayService
         }
         await this.db.createRequest(ip, false);
       }
-      this.wss!.handleUpgrade(req, socket, head, (ws) =>
-        this.connected(ws, ip),
-      );
+      if (this.stopping) {
+        socket.destroy();
+        return;
+      }
+      this.wss!.handleUpgrade(req, socket, head, (ws) => {
+        this.connected(ws, ip);
+        if (this.stopping) ws.terminate();
+      });
     } catch (err) {
       this.logger.warn(`P2P upgrade rejected: ${(err as Error).message}`);
       if (!socket.destroyed) this.reject(socket, 511);
@@ -181,13 +184,24 @@ export class P2PGatewayService
         });
     });
     ws.on("close", () => {
-      this.states.delete(ws);
-      if (this.sessions.relayEnabled())
-        void this.sessions
-          .relayLeaveFor(handle)
-          .catch((err) => this.logger.warn((err as Error).message));
-      else this.sessions.destroyAllFor(handle);
+      void this.cleanupState(ws, state).catch((err) =>
+        this.logger.warn((err as Error).message),
+      );
     });
+  }
+
+  private cleanupState(ws: WebSocket, state: PeerState): Promise<void> {
+    if (!state.cleanup)
+      state.cleanup = state.processing.then(async () => {
+        try {
+          if (this.sessions.relayEnabled())
+            await this.sessions.relayLeaveFor(state.handle);
+          else this.sessions.destroyAllFor(state.handle);
+        } finally {
+          this.states.delete(ws);
+        }
+      });
+    return state.cleanup;
   }
 
   private async fail(

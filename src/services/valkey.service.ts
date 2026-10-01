@@ -54,6 +54,7 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
   // Closing the client earlier would make that flush fail.
   async onApplicationShutdown() {
     if (this.subscriber) {
+      await this.subscriber.unsubscribe();
       await this.subscriber.quit();
       this.subscriber = null;
     }
@@ -213,36 +214,32 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
       local remaining = redis.call('LRANGE', KEYS[2], 0, -1)
       if ARGV[2] == 'transfer' and ARGV[1] == ARGV[3] then
         redis.call('DEL', KEYS[1], KEYS[2])
+        if ARGV[7] == '1' then redis.call('ZREM', KEYS[3], ARGV[5]) end
       elseif ARGV[2] == 'room' and #remaining == 0 then
         redis.call('PEXPIRE', KEYS[1], ARGV[4])
         redis.call('PEXPIRE', KEYS[2], ARGV[4])
+        if ARGV[7] == '1' then
+          redis.call('ZADD', KEYS[3], tonumber(ARGV[6]) + tonumber(ARGV[4]), ARGV[5])
+        end
       end
       return remaining
     `;
     const peers = (await this.getClient().eval(
       script,
-      2,
+      3,
       this.key("p2p", "session", id),
       this.key("p2p", "peers", id),
+      this.key("p2p", "ip", session.ip ?? "none"),
       peerId,
       session.kind,
       session.creatorId,
       Math.max(1, graceMs),
+      id,
+      Date.now(),
+      session.ip ? "1" : "0",
     )) as string[];
     if (peers[0] === "__not_found__") return null;
     session.peers = peers;
-    if (
-      session.ip &&
-      session.kind === "transfer" &&
-      peerId === session.creatorId
-    )
-      await this.p2pReleaseIpSession(session.ip, id);
-    else if (session.ip && session.kind === "room" && peers.length === 0)
-      await this.getClient().zadd(
-        this.key("p2p", "ip", session.ip),
-        Date.now() + Math.max(1, graceMs),
-        id,
-      );
     return session;
   }
 
@@ -272,9 +269,9 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     );
   }
 
-  async p2pDeleteSession(id: string): Promise<void> {
-    const session = await this.p2pGetSession(id);
-    if (session?.ip) await this.p2pReleaseIpSession(session.ip, id);
+  async p2pDeleteSession(id: string, knownIp?: string): Promise<void> {
+    const ip = knownIp ?? (await this.p2pGetSession(id))?.ip;
+    if (ip) await this.p2pReleaseIpSession(ip, id);
     await this.getClient().del(
       this.key("p2p", "session", id),
       this.key("p2p", "peers", id),

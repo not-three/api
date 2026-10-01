@@ -3,6 +3,7 @@ import { createTestApp, TestApp } from "./app";
 import { DatabaseService } from "src/services/database.service";
 import { ValkeyService } from "src/services/valkey.service";
 import { P2PSessionService } from "src/services/p2p-session.service";
+import { P2PGatewayService } from "src/services/p2p-gateway.service";
 import request from "supertest";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RedisMock = require("ioredis-mock");
@@ -40,6 +41,53 @@ async function connect(port: number, ip: string): Promise<WebSocket> {
 }
 function send(ws: WebSocket, data: object) {
   ws.send(JSON.stringify(data));
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function gateFirstCall(target: any, method: string, stage: "before" | "after") {
+  const entered = deferred();
+  const release = deferred();
+  const original = target[method].bind(target);
+  let first = true;
+  let args: any[] = [];
+  jest.spyOn(target, method).mockImplementation(async (...current: any[]) => {
+    if (!first) return original(...current);
+    first = false;
+    args = current;
+    if (stage === "before") {
+      entered.resolve();
+      await release.promise;
+      return original(...current);
+    }
+    const result = await original(...current);
+    entered.resolve();
+    await release.promise;
+    return result;
+  });
+  return {
+    entered: entered.promise,
+    release: release.resolve,
+    get args() {
+      return args;
+    },
+  };
+}
+
+async function waitUntil(
+  check: () => Promise<boolean> | boolean,
+): Promise<void> {
+  const deadline = Date.now() + 500;
+  while (!(await check())) {
+    if (Date.now() >= deadline) throw new Error("condition not reached");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 describe("P2P gateway", () => {
@@ -573,6 +621,297 @@ describe("P2P rapid frames across replicas", () => {
     });
   });
 });
+
+describe("P2P disconnect during Valkey admission", () => {
+  const base = new RedisMock();
+  let host: TestApp, guest: TestApp;
+  let ports: number[];
+  const sockets: WebSocket[] = [];
+  beforeAll(async () => {
+    const env = {
+      P2P_ENABLED: "true",
+      P2P_ROOM_MAX_PEERS: "2",
+      P2P_MAX_SESSIONS_PER_IP: "1",
+      DATABASE_REQUEST_OPTIMIZATION: "hard",
+      VALKEY_ENABLED: "false",
+    };
+    const overrides = { valkeyClientFactory: () => base.duplicate() };
+    host = await createTestApp(env, overrides);
+    guest = await createTestApp(env, overrides);
+    ports = [await host.listen(), await guest.listen()];
+  });
+  afterEach(() => {
+    sockets.splice(0).forEach((ws) => ws.terminate());
+    jest.restoreAllMocks();
+  });
+  afterAll(async () => {
+    await Promise.all([host.close(), guest.close()]);
+    await base.quit();
+  });
+  const open = async (index: number, ip: string) => {
+    const ws = await connect(ports[index], ip);
+    sockets.push(ws);
+    return ws;
+  };
+
+  const createCases = [
+    ["before quota reserve", "p2pReserveIpSession", "before"],
+    ["after quota reserve", "p2pReserveIpSession", "after"],
+    ["before session registration", "p2pRegisterSession", "before"],
+    ["after session registration", "p2pRegisterSession", "after"],
+  ] as const;
+  it.each(createCases)(
+    "releases creator state on close %s",
+    async (_name, method, stage) => {
+      const ip = `10.16.1.${createCases.findIndex((item) => item[1] === method && item[2] === stage) + 1}`;
+      const sessions = host.app.get(P2PSessionService);
+      const valkey = host.app.get(ValkeyService);
+      const finished = deferred();
+      const original = sessions.relayCreate.bind(sessions);
+      jest
+        .spyOn(sessions, "relayCreate")
+        .mockImplementation(async (...args) => {
+          try {
+            return await original(...args);
+          } finally {
+            finished.resolve();
+          }
+        });
+      const gate = gateFirstCall(valkey, method, stage);
+      const peer = await open(0, ip);
+      try {
+        send(peer, { type: "create", kind: "transfer" });
+        await gate.entered;
+        const serverPeers = [
+          ...(host.app.get(P2PGatewayService) as any).states.keys(),
+        ] as WebSocket[];
+        const serverPeer = serverPeers[serverPeers.length - 1];
+        const closed = new Promise<void>((resolve) =>
+          serverPeer.once("close", resolve),
+        );
+        peer.terminate();
+        await closed;
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        gate.release();
+      }
+      await finished.promise;
+      const id = method === "p2pReserveIpSession" ? gate.args[1] : gate.args[0];
+      await waitUntil(
+        async () =>
+          sessions.sessionsForIp(ip) === 0 &&
+          !(await valkey.p2pSessionExists(id)) &&
+          (await base.zscore(`not3:p2p:ip:${ip}`, id)) === null,
+      );
+    },
+  );
+
+  const joinCases = [
+    ["before session lookup", "p2pGetSession", "before"],
+    ["before slot admission", "p2pJoinSession", "before"],
+    ["after slot admission", "p2pJoinSession", "after"],
+    ["before slot touch", "p2pTouchSession", "before"],
+    ["after slot touch", "p2pTouchSession", "after"],
+  ] as const;
+  it.each(joinCases)(
+    "releases room slot on close %s",
+    async (_name, method, stage) => {
+      const index =
+        joinCases.findIndex((item) => item[1] === method && item[2] === stage) +
+        1;
+      const owner = await open(0, `10.16.2.${index}`);
+      send(owner, { type: "create", kind: "room" });
+      const created = await frame(owner);
+      const sessions = guest.app.get(P2PSessionService);
+      const valkey = guest.app.get(ValkeyService);
+      const finished = deferred();
+      const original = sessions.relayJoin.bind(sessions);
+      jest.spyOn(sessions, "relayJoin").mockImplementation(async (...args) => {
+        try {
+          return await original(...args);
+        } finally {
+          finished.resolve();
+        }
+      });
+      const gate = gateFirstCall(valkey, method, stage);
+      const peer = await open(1, `10.16.3.${index}`);
+      try {
+        send(peer, { type: "join", sessionId: created.sessionId });
+        await gate.entered;
+        const serverPeers = [
+          ...(guest.app.get(P2PGatewayService) as any).states.keys(),
+        ] as WebSocket[];
+        const serverPeer = serverPeers[serverPeers.length - 1];
+        const closed = new Promise<void>((resolve) =>
+          serverPeer.once("close", resolve),
+        );
+        peer.terminate();
+        await closed;
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        gate.release();
+      }
+      await finished.promise;
+      await waitUntil(
+        async () =>
+          JSON.stringify(
+            (await valkey.p2pGetSession(created.sessionId))?.peers,
+          ) === JSON.stringify([created.peerId]),
+      );
+    },
+  );
+
+  it.each(["p2pReserveIpSession", "p2pRegisterSession"])(
+    "rolls back a creator when %s reports failure after writing",
+    async (method) => {
+      const ip = method === "p2pReserveIpSession" ? "10.16.4.1" : "10.16.4.2";
+      const sessions = host.app.get(P2PSessionService);
+      const valkey = host.app.get(ValkeyService);
+      const original = valkey[method].bind(valkey);
+      const existingSessions = (await base.keys("not3:p2p:session:*")).sort();
+      jest
+        .spyOn(valkey as any, method)
+        .mockImplementationOnce(async (...args: any[]) => {
+          await original(...(args as Parameters<typeof original>));
+          throw new Error("write acknowledgement lost");
+        });
+      const handle = { send: jest.fn(), kill: jest.fn() };
+      await expect(
+        sessions.relayCreate(ip, handle, "transfer"),
+      ).rejects.toThrow("write acknowledgement lost");
+      expect(sessions.sessionsForIp(ip)).toBe(0);
+      expect(await base.zcard(`not3:p2p:ip:${ip}`)).toBe(0);
+      expect((await base.keys("not3:p2p:session:*")).sort()).toEqual(
+        existingSessions,
+      );
+    },
+  );
+
+  it.each(["p2pJoinSession", "p2pPublish"])(
+    "rolls back an admitted member when %s reports failure",
+    async (method) => {
+      const owner = await open(
+        0,
+        method === "p2pJoinSession" ? "10.16.5.1" : "10.16.5.2",
+      );
+      send(owner, { type: "create", kind: "room" });
+      const created = await frame(owner);
+      const sessions = guest.app.get(P2PSessionService);
+      const valkey = guest.app.get(ValkeyService);
+      if (method === "p2pJoinSession") {
+        const original = valkey.p2pJoinSession.bind(valkey);
+        jest
+          .spyOn(valkey as any, method)
+          .mockImplementationOnce(async (...args: any[]) => {
+            await original(...(args as Parameters<typeof original>));
+            throw new Error("write acknowledgement lost");
+          });
+      } else {
+        jest
+          .spyOn(valkey, "p2pPublish")
+          .mockRejectedValueOnce(new Error("publish failed"));
+      }
+      await expect(
+        sessions.relayJoin(created.sessionId, {
+          send: jest.fn(),
+          kill: jest.fn(),
+        }),
+      ).rejects.toThrow();
+      expect((await valkey.p2pGetSession(created.sessionId))?.peers).toEqual([
+        created.peerId,
+      ]);
+    },
+  );
+
+  it("releases creator quota in the same write as transfer membership", async () => {
+    const ip = "10.16.6.1";
+    const sessions = host.app.get(P2PSessionService);
+    const valkey = host.app.get(ValkeyService);
+    const created = await sessions.relayCreate(
+      ip,
+      { send: jest.fn(), kill: jest.fn() },
+      "transfer",
+    );
+    if (created === "too-many") throw new Error("creator rejected");
+    jest
+      .spyOn(valkey, "p2pReleaseIpSession")
+      .mockRejectedValueOnce(new Error("separate quota write failed"));
+    await sessions.relayLeave(created.session.id, created.peerId);
+    expect(await valkey.p2pSessionExists(created.session.id)).toBe(false);
+    expect(
+      await base.zscore(`not3:p2p:ip:${ip}`, created.session.id),
+    ).toBeNull();
+  });
+});
+
+it.each(["create", "join"] as const)(
+  "waits for pending %s admission before app shutdown",
+  async (operation) => {
+    const base = new RedisMock();
+    const env = {
+      P2P_ENABLED: "true",
+      DATABASE_REQUEST_OPTIMIZATION: "hard",
+      VALKEY_ENABLED: "false",
+    };
+    const overrides = { valkeyClientFactory: () => base.duplicate() };
+    const ownerApp = await createTestApp(env, overrides);
+    const workerApp = await createTestApp(env, overrides);
+    let owner: WebSocket | undefined;
+    let worker: WebSocket | undefined;
+    let workerClosed = false;
+    let gate: ReturnType<typeof gateFirstCall> | undefined;
+    try {
+      const ownerPort = await ownerApp.listen();
+      const workerPort = await workerApp.listen();
+      let sessionId: string | undefined;
+      if (operation === "join") {
+        owner = await connect(ownerPort, "10.17.1.1");
+        send(owner, { type: "create", kind: "room" });
+        sessionId = (await frame(owner)).sessionId;
+      }
+      const valkey = workerApp.app.get(ValkeyService);
+      gate = gateFirstCall(
+        valkey,
+        operation === "create" ? "p2pRegisterSession" : "p2pJoinSession",
+        "after",
+      );
+      worker = await connect(workerPort, "10.17.1.2");
+      send(
+        worker,
+        operation === "create"
+          ? { type: "create" }
+          : { type: "join", sessionId },
+      );
+      await gate.entered;
+      if (operation === "create") sessionId = gate.args[0];
+      const close = workerApp.close().then(() => {
+        workerClosed = true;
+      });
+      const premature = await Promise.race([
+        close.then(() => "closed"),
+        new Promise<string>((resolve) =>
+          setTimeout(() => resolve("pending"), 30),
+        ),
+      ]);
+      expect(premature).toBe("pending");
+      gate.release();
+      await close;
+      const current = await ownerApp.app
+        .get(ValkeyService)
+        .p2pGetSession(sessionId!);
+      if (operation === "create") expect(current).toBeNull();
+      else expect(current?.peers).toHaveLength(1);
+    } finally {
+      gate?.release();
+      owner?.terminate();
+      worker?.terminate();
+      if (!workerClosed) await workerApp.close();
+      await ownerApp.close();
+      await base.quit();
+      jest.restoreAllMocks();
+    }
+  },
+);
 
 it("closes active room sockets and removes Valkey membership before app shutdown", async () => {
   const base = new RedisMock();

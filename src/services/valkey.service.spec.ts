@@ -156,6 +156,25 @@ describe("ValkeyService", () => {
     }
   });
 
+  it("removes its P2P subscription on shutdown", async () => {
+    const base = new RedisMock();
+    class SharedValkeyService extends ValkeyService {
+      protected createClient() {
+        return base.duplicate();
+      }
+    }
+    const subscriber = new SharedValkeyService(makeConfig());
+    await subscriber.onModuleInit();
+    try {
+      await subscriber.p2pSubscribe(() => undefined);
+      expect(base.channels.listenerCount("not3:p2p:bus")).toBe(1);
+    } finally {
+      await subscriber.onApplicationShutdown();
+      expect(base.channels.listenerCount("not3:p2p:bus")).toBe(0);
+      await base.quit();
+    }
+  });
+
   it("admits only one of two concurrent peers into the last room slot", async () => {
     await svc.p2pRegisterSession("race", "room", "creator", 2, 60_000);
     const results = await Promise.all([
