@@ -55,6 +55,25 @@ describe("system endpoints", () => {
     }
   });
 
+  it("documents P2P info fields in /swagger-json", async () => {
+    const withSwagger = await createTestApp({}, { swagger: true });
+    try {
+      const response = await request(withSwagger.server)
+        .get("/swagger-json")
+        .expect(200);
+      const fields = response.body.components?.schemas?.InfoResponse;
+      expect(fields).toMatchObject({
+        properties: {
+          p2pEnabled: expect.any(Object),
+          p2pRooms: expect.any(Object),
+          p2pRoomMaxPeers: expect.any(Object),
+        },
+      });
+    } finally {
+      await withSwagger.close();
+    }
+  });
+
   it("serves stats reflecting created notes", async () => {
     await request(t.server)
       .post("/note/json")

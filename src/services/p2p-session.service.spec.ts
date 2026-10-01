@@ -26,6 +26,7 @@ describe("P2PSessionService", () => {
     if (first === "too-many") return;
     expect(first.session.id).toMatch(/^.{8}$/);
     expect(first.peerId).toMatch(/^.{8,16}$/);
+    expect((svc as any).sweepTimer.hasRef()).toBe(false);
     svc.create("10.0.0.1", handle());
     expect(svc.create("10.0.0.1", handle())).toBe("too-many");
     expect(svc.sessionsForIp("10.0.0.1")).toBe(2);
@@ -83,6 +84,19 @@ describe("P2PSessionService", () => {
     expect(svc.get(id)).toBeNull();
   });
 
+  it("keeps a room alive while another peer remains connected", async () => {
+    const created = svc.create("a", handle(), "room");
+    if (created === "too-many") throw Error();
+    const joined = svc.join(created.session.id, handle());
+    if (typeof joined === "string") throw Error();
+    svc.leave(created.session.id, created.peerId);
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(svc.get(created.session.id)).not.toBeNull();
+    svc.leave(created.session.id, joined.peerId);
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(svc.get(created.session.id)).toBeNull();
+  });
+
   it("cancels room expiry on rejoin and reaps idle sessions", async () => {
     const first = svc.create("a", handle(), "room");
     if (first === "too-many") throw Error();
@@ -93,6 +107,53 @@ describe("P2PSessionService", () => {
     first.session.lastActivity = Date.now() - 31 * 60_000;
     expect(svc.sweepStale()).toBe(1);
     expect(svc.get(first.session.id)).toBeNull();
+  });
+
+  it("refreshes activity so an active session survives the idle sweep", () => {
+    const created = svc.create("a", handle());
+    if (created === "too-many") throw Error();
+    created.session.lastActivity = Date.now() - 31 * 60_000;
+    svc.touch(created.session.id);
+    expect(svc.sweepStale()).toBe(0);
+    expect(svc.get(created.session.id)).not.toBeNull();
+  });
+
+  it("notifies both transfer peers when a session is destroyed", () => {
+    const sender = handle();
+    const receiver = handle();
+    const created = svc.create("a", sender);
+    if (created === "too-many") throw Error();
+    const joined = svc.join(created.session.id, receiver);
+    if (typeof joined === "string") throw Error();
+    svc.destroy(created.session.id);
+    expect(sender.send).toHaveBeenCalledWith({
+      type: "peer-left",
+      peerId: joined.peerId,
+    });
+    expect(receiver.send).toHaveBeenCalledWith({
+      type: "peer-left",
+      peerId: created.peerId,
+    });
+    expect(sender.kill).toHaveBeenCalled();
+    expect(receiver.kill).toHaveBeenCalled();
+    expect(svc.get(created.session.id)).toBeNull();
+  });
+
+  it("continues cleanup when a peer callback throws", () => {
+    const broken: P2PPeerHandle = {
+      send: () => {
+        throw new Error("socket closed");
+      },
+      kill: () => {
+        throw new Error("socket closed");
+      },
+    };
+    const created = svc.create("a", broken, "room");
+    if (created === "too-many") throw Error();
+    const joined = svc.join(created.session.id, handle());
+    if (typeof joined === "string") throw Error();
+    expect(() => svc.destroy(created.session.id)).not.toThrow();
+    expect(svc.get(created.session.id)).toBeNull();
   });
 
   it("preserves the full room grace after the final peer leaves near idle TTL", async () => {

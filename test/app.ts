@@ -4,6 +4,7 @@ import { AppModule } from "src/app.module";
 import { ValkeyService } from "src/services/valkey.service";
 import { ConfigService } from "src/services/config.service";
 import Valkey from "iovalkey";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
 export interface TestApp {
   app: NestExpressApplication;
@@ -25,7 +26,7 @@ const DEFAULT_ENV: Record<string, string> = {
 
 export async function createTestApp(
   env: Record<string, string> = {},
-  overrides: { valkeyClientFactory?: () => Valkey } = {},
+  overrides: { valkeyClientFactory?: () => Valkey; swagger?: boolean } = {},
 ): Promise<TestApp> {
   const applied = { ...DEFAULT_ENV, ...env };
   const previous: Record<string, string | undefined> = {};
@@ -72,6 +73,12 @@ export async function createTestApp(
   });
   app.useBodyParser("json", { limit: "10mb" });
   app.useBodyParser("text", { limit: "10mb" });
+  if (overrides.swagger) {
+    const config = new DocumentBuilder().build();
+    SwaggerModule.setup("swagger", app, () =>
+      SwaggerModule.createDocument(app, config),
+    );
+  }
   await app.init();
 
   return {

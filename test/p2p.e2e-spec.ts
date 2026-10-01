@@ -8,6 +8,133 @@ import request from "supertest";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RedisMock = require("ioredis-mock");
 
+/**
+ * API P2P conformance checklist (OMO job 2 and its archived API plan).
+ * Each entry names the proving Jest test; paths are relative to this repo.
+ *
+ * Config and public metadata
+ * [x] Disabled default, default STUN only, room defaults, TTL and limits:
+ *     src/config/P2P.spec.ts "defaults to disabled transfer and rooms with STUN only".
+ * [x] P2P_* env overrides, external TURN credentials, independently disabled rooms:
+ *     src/config/P2P.spec.ts "uses env overrides for ICE and room policy" and
+ *     "can disable rooms independently". Config fields carry @default/@env;
+ *     `pnpm build` generates TypeDoc without warnings.
+ * [x] /info defaults and enabled room fields, plus OpenAPI schema:
+ *     test/system.e2e-spec.ts "serves instance info", "exposes enabled P2P
+ *     and room settings in info", "documents P2P info fields in /swagger-json".
+ * [x] No bundled TURN service: P2PConfig default ICE test offers STUN only;
+ *     configured external TURN appears only as client ICE configuration.
+ *
+ * Reliability and wire protocol
+ * [x] /p2p only, JSON text only, invalid forwarded IP returns 511, disabled
+ *     upgrade stays unavailable: "rejects invalid forwarded IPs and upgrades
+ *     outside /p2p", "rejects non-JSON and binary signaling frames", "does
+ *     not accept WebSocket upgrades while P2P is disabled".
+ * [x] Transfer create/join replies (sessionId, kind, unique 8-16 character
+ *     peerIds, STUN ICE), one receiver, opaque bidirectional signals with
+ *     `from` and ignored transfer `to`, leave/rejoin and peer notifications:
+ *     "creates transfer, joins, relays opaque signals, and permits receiver
+ *     rejoin", "caps transfer and rejects unknown sessions".
+ * [x] Room create/join, other-member `peers`, three members, configured cap,
+ *     addressed-only signals, `from`, missing/invalid `to`, and leave:
+ *     "routes room signals only to the addressed peer and expires empty rooms",
+ *     "rejects room signals without a valid destination".
+ * [x] All gateway error codes: disabled ("rejects room creation when only
+ *     transfer signaling is enabled"), not-found/session-full ("caps transfer
+ *     and rejects unknown sessions"), rate-limited ("closes a socket after
+ *     its sixth message in one minute"), invalid-message ("rejects oversized
+ *     and malformed frames").
+ * [x] Non-JSON, binary, unknown type, premature signal, duplicate create/join,
+ *     own-session join, oversized frame, malformed unmasked wire frame, and
+ *     parser memory bound: "rejects non-JSON and binary signaling frames",
+ *     "rejects a signal before joining and a creator joining its own session",
+ *     "rejects oversized and malformed frames", "rejects a second create
+ *     queued before the first Valkey write completes", "rejects a second join
+ *     queued before the first Valkey write completes", "closes a peer after an
+ *     unmasked wire frame and continues serving", "limits parser buffering
+ *     near the configured frame size".
+ * [x] Parser cap is 2x configured size (minimum 1 KiB): moderately oversized
+ *     frames still get the application invalid-message reply; larger frames
+ *     close at the bounded transport parser with 1009. "applies the configured
+ *     message cap before the bounded parser cap" tests 1024/1500/3000 bytes.
+ * [x] 30-second unref'd ping/pong heartbeat and terminate+cleanup on missed pong:
+ *     "terminates a peer that misses heartbeat pongs and keeps responsive peers".
+ * [x] The archived plan's manual create/join/signal/leave smoke is exercised
+ *     against a bound HTTP server with real WS clients by "creates transfer,
+ *     joins, relays opaque signals, and permits receiver rejoin".
+ *
+ * Abuse controls
+ * [x] Banned IP -> 418, invalid IP -> 511, upgrade accounting -> 429:
+ *     "rejects banned IPs during upgrade", "rejects invalid forwarded IPs
+ *     and upgrades outside /p2p", "counts WebSocket upgrades against the HTTP
+ *     request budget".
+ * [x] Per-socket rolling message rate, failed joins feeding shared HTTP ban,
+ *     and LIMITS_DISABLED bypass: "closes a socket after its sixth message in
+ *     one minute", "counts messages over a rolling minute across a window
+ *     boundary", "bans failed joins through the shared HTTP ban store",
+ *     "bypasses P2P abuse limits when limits are disabled".
+ *
+ * Capacity caps
+ * [x] Local transfer/room peer caps and per-IP creator cap:
+ *     src/services/p2p-session.service.spec.ts "keeps transfer sender, caps
+ *     receiver, and allows receiver rejoin", "routes room members and expires
+ *     after empty grace", "allocates unique peer IDs and limits sessions per
+ *     creator IP" (also checks unref'd sweep); "applies the creator IP session
+ *     cap across replicas".
+ *
+ * Grace and TTL
+ * [x] Local room grace, cancel on rejoin, eventual expiry, idle TTL and touch:
+ *     src/services/p2p-session.service.spec.ts "routes room members and expires
+ *     after empty grace", "cancels room expiry on rejoin and reaps idle
+ *     sessions", "refreshes activity so an active session survives the idle
+ *     sweep", "preserves the full room grace after the final peer leaves near
+ *     idle TTL", "keeps a room alive while another peer remains connected";
+ *     "routes room signals only to the addressed peer and expires empty rooms".
+ * [x] Valkey room grace, concurrent leave/join slot safety, duplicate peer ID,
+ *     touch and expiry: src/services/valkey.service.spec.ts "shares P2P room
+ *     membership and enforces capacity", "admits only one of two concurrent
+ *     peers into the last room slot", "rejects a duplicate peer ID within a
+ *     session", "starts room grace when the final peers leave concurrently",
+ *     "does not extend an empty room beyond its grace through a late touch".
+ *
+ * Split-replica routing
+ * [x] Split-replica transfer and addressed three-replica room signaling,
+ *     pub/sub, creator IP quota, join-only expiry cleanup and grace rejoin:
+ *     "relays transfer signaling between two replicas", "routes room signals
+ *     by peer ID across three replicas", "applies the creator IP session cap
+ *     across replicas", "allows a room to rejoin during grace and frees its
+ *     IP quota after expiry", "reaps an expired room peer on a join-only
+ *     replica"; src/services/valkey.service.spec.ts "publishes targeted P2P
+ *     frames to another subscriber". test/app.ts injects a Valkey client per
+ *     app, so concurrent replicas do not share process-global test hooks.
+ *
+ * Disconnect cleanup
+ * [x] Creator death, receiver slot release, destroy notifications and local
+ *     quota cleanup: "removes a transfer when its creator disconnects";
+ *     src/services/p2p-session.service.spec.ts "destroys transfer when sender
+ *     dies and frees receiver when it dies", "notifies both transfer peers
+ *     when a session is destroyed", "continues cleanup when a peer callback
+ *     throws"; "releases the local creator slot when a leave notification
+ *     fails".
+ * [x] Close during Valkey reserve/register/lookup/join/touch, post-write
+ *     rollback, atomic quota release, pending create/join shutdown:
+ *     "P2P disconnect during Valkey admission" parameterized tests,
+ *     "releases creator quota in the same write as transfer membership",
+ *     "waits for pending create admission before app shutdown", "waits for
+ *     pending join admission before app shutdown".
+ *
+ * Shutdown
+ * [x] App shutdown removes Valkey membership, closes sockets even on leave
+ *     failure, and unsubscribes pub/sub: "closes active room sockets and
+ *     removes Valkey membership before app shutdown", "still closes active
+ *     sockets when Valkey leave fails during shutdown";
+ *     src/services/valkey.service.spec.ts "removes its P2P subscription on
+ *     shutdown".
+ *
+ * SDK data-channel encryption/chunks, CLI/UI file flows, and npm release are
+ * separate jobs in the parent spec; this API only exchanges signaling frames.
+ */
+
 type Frame = Record<string, any>;
 const inbox = new WeakMap<
   WebSocket,
@@ -18,9 +145,14 @@ function frame(ws: WebSocket): Promise<Frame> {
   if (state.queue.length) return Promise.resolve(state.queue.shift()!);
   return new Promise((resolve) => state.waiters.push(resolve));
 }
-async function connect(port: number, ip: string): Promise<WebSocket> {
+async function connect(
+  port: number,
+  ip: string,
+  autoPong = true,
+): Promise<WebSocket> {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/p2p`, {
     headers: { "X-Forwarded-For": ip },
+    autoPong,
   });
   const state = {
     queue: [] as Frame[],
@@ -132,12 +264,14 @@ describe("P2P gateway", () => {
       sessionId: created.sessionId,
       peers: [],
     });
+    expect(joined.peerId).toMatch(/^.{8,16}$/);
+    expect(joined.peerId).not.toBe(created.peerId);
     expect(await frame(a)).toMatchObject({
       type: "peer-joined",
       peerId: joined.peerId,
     });
     const payload = { nested: [1, { sdp: "opaque" }] };
-    send(a, { type: "signal", payload });
+    send(a, { type: "signal", to: "ignored-in-transfer", payload });
     expect(await frame(b)).toEqual({
       type: "signal",
       from: created.peerId,
@@ -189,11 +323,13 @@ describe("P2P gateway", () => {
     const bj = await frame(b);
     await frame(a);
     expect(bj.peers).toEqual([created.peerId]);
+    expect(bj.peerId).not.toBe(created.peerId);
     send(c, { type: "join", sessionId: created.sessionId });
     const cj = await frame(c);
     await frame(a);
     await frame(b);
     expect(cj.peers).toEqual([created.peerId, bj.peerId]);
+    expect(cj.peerId).not.toBe(bj.peerId);
     send(d, { type: "join", sessionId: created.sessionId });
     expect(await frame(d)).toEqual({ type: "error", code: "session-full" });
     send(b, { type: "signal", to: cj.peerId, payload: { target: "c" } });
@@ -250,6 +386,44 @@ describe("P2P gateway", () => {
     expect(await frame(b)).toEqual({ type: "error", code: "invalid-message" });
   });
 
+  it("rejects non-JSON and binary signaling frames", async () => {
+    const invalidJson = await open("10.9.7.3");
+    invalidJson.send("{");
+    expect(await frame(invalidJson)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+    const binary = await open("10.9.7.4");
+    binary.send(Buffer.from("{}"));
+    expect(await frame(binary)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+  });
+
+  it("rejects a signal before joining and a creator joining its own session", async () => {
+    const unjoined = await open("10.9.7.5");
+    send(unjoined, { type: "signal", payload: { offer: true } });
+    expect(await frame(unjoined)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+    const creator = await open("10.9.7.6");
+    send(creator, { type: "create" });
+    const created = await frame(creator);
+    send(creator, { type: "join", sessionId: created.sessionId });
+    expect(await frame(creator)).toEqual({
+      type: "error",
+      code: "invalid-message",
+    });
+    await waitUntil(
+      () => t.app.get(P2PSessionService).sessionsForIp("10.9.7.6") === 0,
+    );
+    const later = await open("10.9.7.9");
+    send(later, { type: "join", sessionId: created.sessionId });
+    expect(await frame(later)).toEqual({ type: "error", code: "not-found" });
+  });
+
   it("closes a peer after an unmasked wire frame and continues serving", async () => {
     const ip = "10.9.7.1";
     const peer = await open(ip);
@@ -276,10 +450,98 @@ describe("P2P gateway", () => {
     expect(await closed).toBe(1009);
   });
 
+  it("applies the configured message cap before the bounded parser cap", async () => {
+    const app = await createTestApp({
+      P2P_ENABLED: "true",
+      P2P_MAX_MESSAGE_BYTES: "1024",
+    });
+    let moderate: WebSocket | undefined;
+    let huge: WebSocket | undefined;
+    try {
+      const appPort = await app.listen();
+      moderate = await connect(appPort, "10.9.7.7");
+      moderate.send("x".repeat(1500));
+      expect(await frame(moderate)).toEqual({
+        type: "error",
+        code: "invalid-message",
+      });
+      huge = await connect(appPort, "10.9.7.8");
+      const closed = new Promise<number>((resolve) =>
+        huge!.once("close", (code) => resolve(code)),
+      );
+      huge.send("x".repeat(3000));
+      expect(await closed).toBe(1009);
+    } finally {
+      moderate?.terminate();
+      huge?.terminate();
+      await app.close();
+    }
+  });
+
   it("rejects banned IPs during upgrade", async () => {
     await t.app.get(DatabaseService).ban("10.9.9.9");
     await expect(connect(port, "10.9.9.9")).rejects.toThrow("418");
   });
+
+  it("rejects invalid forwarded IPs and upgrades outside /p2p", async () => {
+    await expect(connect(port, "invalid-ip")).rejects.toThrow("511");
+    const wrongPath = new WebSocket(`ws://127.0.0.1:${port}/else`);
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        wrongPath.once("open", resolve);
+        wrongPath.once("error", reject);
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+it("terminates a peer that misses heartbeat pongs and keeps responsive peers", async () => {
+  const nativeSetInterval = global.setInterval.bind(global);
+  jest
+    .spyOn(global, "setInterval")
+    .mockImplementation(((handler: any, timeout?: number, ...args: any[]) =>
+      nativeSetInterval(
+        handler,
+        timeout === 30_000 ? 100 : timeout,
+        ...args,
+      )) as typeof setInterval);
+  let app!: TestApp;
+  try {
+    app = await createTestApp({ P2P_ENABLED: "true" });
+  } finally {
+    jest.restoreAllMocks();
+  }
+  let silent: WebSocket | undefined;
+  let responsive: WebSocket | undefined;
+  try {
+    const port = await app.listen();
+    expect(
+      (
+        (app.app.get(P2PGatewayService) as any).heartbeat as NodeJS.Timeout
+      ).hasRef(),
+    ).toBe(false);
+    silent = await connect(port, "10.9.6.1", false);
+    responsive = await connect(port, "10.9.6.2");
+    send(silent, { type: "create" });
+    expect((await frame(silent)).type).toBe("created");
+    const closed = new Promise<void>((resolve) =>
+      silent!.once("close", () => resolve()),
+    );
+    expect(
+      await Promise.race([
+        closed.then(() => "closed"),
+        new Promise((resolve) => setTimeout(() => resolve("timed-out"), 1000)),
+      ]),
+    ).toBe("closed");
+    expect(responsive.readyState).toBe(WebSocket.OPEN);
+    await waitUntil(
+      () => app.app.get(P2PSessionService).sessionsForIp("10.9.6.1") === 0,
+    );
+  } finally {
+    silent?.terminate();
+    responsive?.terminate();
+    await app.close();
+  }
 });
 
 it("does not accept WebSocket upgrades while P2P is disabled", async () => {
