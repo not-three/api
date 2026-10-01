@@ -565,6 +565,70 @@ describe("P2P Valkey relay", () => {
   });
 });
 
+it("reaps an expired room peer on a join-only replica", async () => {
+  const base = new RedisMock();
+  const env = {
+    P2P_ENABLED: "true",
+    DATABASE_REQUEST_OPTIMIZATION: "hard",
+    VALKEY_ENABLED: "false",
+  };
+  const overrides = { valkeyClientFactory: () => base.duplicate() };
+  const creatorApp = await createTestApp(env, overrides);
+  const joinerApp = await createTestApp(env, overrides);
+  let creator: WebSocket | undefined;
+  let joiner: WebSocket | undefined;
+  try {
+    const creatorPort = await creatorApp.listen();
+    const joinerPort = await joinerApp.listen();
+    creator = await connect(creatorPort, "10.18.1.1");
+    send(creator, { type: "create", kind: "room" });
+    const created = await frame(creator);
+
+    const nativeSetInterval = global.setInterval.bind(global);
+    jest
+      .spyOn(global, "setInterval")
+      .mockImplementation(((handler: any, timeout?: number, ...args: any[]) =>
+        nativeSetInterval(
+          handler,
+          timeout === 60_000 ? 10 : timeout,
+          ...args,
+        )) as typeof setInterval);
+    joiner = await connect(joinerPort, "10.18.1.2");
+    send(joiner, { type: "join", sessionId: created.sessionId });
+    expect((await frame(joiner)).type).toBe("joined");
+    await frame(creator);
+    jest.restoreAllMocks();
+
+    send(creator, { type: "leave" });
+    expect(await frame(joiner)).toEqual({
+      type: "peer-left",
+      peerId: created.peerId,
+    });
+    const valkey = creatorApp.app.get(ValkeyService).getClient();
+    await valkey.pexpire(`not3:p2p:session:${created.sessionId}`, 1);
+    await valkey.pexpire(`not3:p2p:peers:${created.sessionId}`, 1);
+    await waitUntil(
+      async () =>
+        !(await creatorApp.app
+          .get(ValkeyService)
+          .p2pSessionExists(created.sessionId)),
+    );
+    expect(
+      await Promise.race([
+        frame(joiner),
+        new Promise((resolve) => setTimeout(() => resolve("not-reaped"), 300)),
+      ]),
+    ).toEqual({ type: "error", code: "not-found" });
+    await waitUntil(() => joiner!.readyState === WebSocket.CLOSED);
+  } finally {
+    jest.restoreAllMocks();
+    creator?.terminate();
+    joiner?.terminate();
+    await Promise.all([creatorApp.close(), joinerApp.close()]);
+    await base.quit();
+  }
+});
+
 describe("P2P rapid frames across replicas", () => {
   const base = new RedisMock();
   let first: TestApp, second: TestApp;

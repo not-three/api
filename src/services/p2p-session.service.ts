@@ -230,6 +230,7 @@ export class P2PSessionService
     const peers = this.relayPeers.get(id) ?? new Map<string, P2PPeerHandle>();
     peers.set(peerId, handle);
     this.relayPeers.set(id, peers);
+    this.startSweep();
   }
 
   private async publishRelay(
@@ -281,17 +282,20 @@ export class P2PSessionService
     const ids = this.byIp.get(ip) ?? new Set<string>();
     ids.add(id);
     this.byIp.set(ip, ids);
-    if (!this.sweepTimer) {
-      this.sweepTimer = setInterval(() => {
-        if (this.relayEnabled())
-          void this.sweepRelayed().catch((err) =>
-            this.logger.warn(`P2P sweep failed: ${(err as Error).message}`),
-          );
-        else this.sweepStale();
-      }, 60_000);
-      this.sweepTimer.unref();
-    }
+    this.startSweep();
     return { session, peerId, peers: [] };
+  }
+
+  private startSweep(): void {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => {
+      if (this.relayEnabled())
+        void this.sweepRelayed().catch((err) =>
+          this.logger.warn(`P2P sweep failed: ${(err as Error).message}`),
+        );
+      else this.sweepStale();
+    }, 60_000);
+    this.sweepTimer.unref();
   }
 
   join(
