@@ -26,10 +26,33 @@ describe("system endpoints", () => {
     expect(res.body).toMatchObject({
       maxStorageTimeDays: 30,
       fileTransferEnabled: false,
+      p2pEnabled: false,
+      p2pRooms: false,
+      p2pRoomMaxPeers: 8,
       privateMode: false,
     });
     expect(typeof res.body.version).toBe("string");
     expect(res.body.availableTokens).toBeGreaterThan(0);
+  });
+
+  it("exposes enabled P2P and room settings in info", async () => {
+    const enabled = await createTestApp({
+      P2P_ENABLED: "true",
+      P2P_ROOM_MAX_PEERS: "3",
+    });
+    try {
+      const res = await request(enabled.server)
+        .get("/info")
+        .set("X-Forwarded-For", "10.0.2.9")
+        .expect(200);
+      expect(res.body).toMatchObject({
+        p2pEnabled: true,
+        p2pRooms: true,
+        p2pRoomMaxPeers: 3,
+      });
+    } finally {
+      await enabled.close();
+    }
   });
 
   it("serves stats reflecting created notes", async () => {

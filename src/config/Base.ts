@@ -5,6 +5,7 @@ import { LimitsConfig } from "./Limits";
 import { GetIpConfig } from "./GetIp";
 import { CorsConfig } from "./Cors";
 import { ValkeyConfig } from "./Valkey";
+import { P2PConfig } from "./P2P";
 
 /** @hidden */
 export const LOG_LEVEL = [
@@ -38,6 +39,9 @@ export class BaseConfig {
 
   /** @hidden */
   valkey = new ValkeyConfig();
+
+  /** @hidden */
+  p2p = new P2PConfig();
 
   /**
    * The length of the IDs. Cannot be higher than 32, and should not be lower than 8.
