@@ -1,4 +1,5 @@
 import {
+  BeforeApplicationShutdown,
   Injectable,
   Logger,
   OnApplicationBootstrap,
@@ -24,7 +25,10 @@ interface PeerState {
 
 @Injectable()
 export class P2PGatewayService
-  implements OnApplicationBootstrap, OnApplicationShutdown
+  implements
+    OnApplicationBootstrap,
+    BeforeApplicationShutdown,
+    OnApplicationShutdown
 {
   private readonly logger = new Logger(P2PGatewayService.name);
   private server?: Server;
@@ -64,10 +68,19 @@ export class P2PGatewayService
     this.heartbeat.unref();
   }
 
-  onApplicationShutdown(): void {
+  async beforeApplicationShutdown(): Promise<void> {
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.server) this.server.off("upgrade", this.upgradeHandler);
+    const peers = [...this.states.values()];
+    if (this.sessions.relayEnabled())
+      await Promise.all(
+        peers.map((state) => this.sessions.relayLeaveFor(state.handle)),
+      );
+    else for (const state of peers) this.sessions.destroyAllFor(state.handle);
     for (const ws of this.states.keys()) ws.terminate();
+  }
+
+  onApplicationShutdown(): void {
     this.wss?.close();
   }
 

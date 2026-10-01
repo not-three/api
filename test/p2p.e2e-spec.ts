@@ -516,3 +516,55 @@ describe("P2P Valkey relay", () => {
     await request(a.server).get("/info").set("X-Forwarded-For", ip).expect(418);
   });
 });
+
+it("closes active room sockets and removes Valkey membership before app shutdown", async () => {
+  const base = new RedisMock();
+  const env = {
+    P2P_ENABLED: "true",
+    DATABASE_REQUEST_OPTIMIZATION: "hard",
+    VALKEY_ENABLED: "false",
+  };
+  const overrides = { valkeyClientFactory: () => base.duplicate() };
+  const host = await createTestApp(env, overrides);
+  const guest = await createTestApp(env, overrides);
+  let creator: WebSocket | undefined;
+  let member: WebSocket | undefined;
+  let hostClosed = false;
+  try {
+    const hostPort = await host.listen();
+    const guestPort = await guest.listen();
+    creator = await connect(hostPort, "10.13.1.1");
+    member = await connect(guestPort, "10.13.1.2");
+    send(creator, { type: "create", kind: "room" });
+    const created = await frame(creator);
+    send(member, { type: "join", sessionId: created.sessionId });
+    const joined = await frame(member);
+    await frame(creator);
+
+    const close = host.close().then(() => {
+      hostClosed = true;
+      return "closed";
+    });
+    const result = await Promise.race([
+      close,
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("timed-out"), 300),
+      ),
+    ]);
+    expect(result).toBe("closed");
+    expect(await frame(member)).toEqual({
+      type: "peer-left",
+      peerId: created.peerId,
+    });
+    expect(
+      (await guest.app.get(ValkeyService).p2pGetSession(created.sessionId))
+        ?.peers,
+    ).toEqual([joined.peerId]);
+  } finally {
+    creator?.terminate();
+    member?.terminate();
+    if (!hostClosed) await host.close();
+    await guest.close();
+    await base.quit();
+  }
+});
