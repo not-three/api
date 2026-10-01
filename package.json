@@ -54,7 +54,8 @@
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.2",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^6.0.1",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
@@ -67,6 +68,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^26.1.2",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "aws-sdk-client-mock": "^4.1.0",

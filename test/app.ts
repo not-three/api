@@ -5,6 +5,7 @@ import { AppModule } from "src/app.module";
 export interface TestApp {
   app: NestExpressApplication;
   server: any;
+  listen(): Promise<number>;
   close(): Promise<void>;
 }
 
@@ -45,6 +46,10 @@ export async function createTestApp(
   return {
     app,
     server: app.getHttpServer(),
+    async listen() {
+      await app.listen(0);
+      return (app.getHttpServer().address() as { port: number }).port;
+    },
     async close() {
       await app.close();
       for (const [key, value] of Object.entries(previous)) {
