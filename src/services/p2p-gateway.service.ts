@@ -157,10 +157,21 @@ export class P2PGatewayService
     code: "invalid-message" | "rate-limited",
     close = true,
   ): Promise<void> {
+    await this.recordFailure(state.ip);
     state.handle.send({ type: "error", code });
-    if (!this.config.get().limits.disabled)
-      await this.db.createRequest(state.ip, true);
     if (close) ws.close(1008);
+  }
+
+  private async recordFailure(ip: string): Promise<void> {
+    const limits = this.config.get().limits;
+    if (limits.disabled) return;
+    await this.db.createRequest(ip, true);
+    const count = await this.db.getRequests(ip);
+    if (
+      count.failed >= limits.banAfterFailedRequests &&
+      !(await this.db.isBanned(ip))
+    )
+      await this.db.ban(ip);
   }
 
   private async message(
@@ -246,9 +257,8 @@ export class P2PGatewayService
       }
       const result = this.sessions.join(frame.sessionId, state.handle);
       if (typeof result === "string") {
+        await this.recordFailure(state.ip);
         state.handle.send({ type: "error", code: result });
-        if (!this.config.get().limits.disabled)
-          await this.db.createRequest(state.ip, true);
         return;
       }
       state.sessionId = result.session.id;

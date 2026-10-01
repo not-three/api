@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { createTestApp, TestApp } from "./app";
 import { DatabaseService } from "src/services/database.service";
+import request from "supertest";
 
 type Frame = Record<string, any>;
 const inbox = new WeakMap<
@@ -209,6 +210,84 @@ it("does not accept WebSocket upgrades while P2P is disabled", async () => {
     const port = await t.listen();
     await expect(connect(port, "10.9.8.1")).rejects.toThrow();
   } finally {
+    await t.close();
+  }
+});
+
+describe("P2P abuse accounting", () => {
+  let t: TestApp, port: number;
+  const sockets: WebSocket[] = [];
+  beforeAll(async () => {
+    t = await createTestApp({
+      P2P_ENABLED: "true",
+      P2P_MAX_MESSAGES_PER_MINUTE: "5",
+      LIMITS_BAN_AFTER_FAILED_REQUESTS: "3",
+      LIMITS_MAX_REQUESTS_PER_IP_PER_MINUTE: "10",
+    });
+    port = await t.listen();
+  });
+  afterEach(() => {
+    for (const ws of sockets.splice(0)) ws.terminate();
+  });
+  afterAll(async () => t.close());
+  const open = async (ip: string) => {
+    const ws = await connect(port, ip);
+    sockets.push(ws);
+    return ws;
+  };
+
+  it("closes a socket after its sixth message in one minute", async () => {
+    const a = await open("10.10.1.1");
+    for (let n = 0; n < 5; n++) {
+      send(a, { type: "join", sessionId: `absent-${n}` });
+      expect(await frame(a)).toEqual({ type: "error", code: "not-found" });
+    }
+    send(a, { type: "join", sessionId: "absent-6" });
+    expect(await frame(a)).toEqual({ type: "error", code: "rate-limited" });
+  });
+
+  it("bans failed joins through the shared HTTP ban store", async () => {
+    const ip = "10.10.2.1";
+    const a = await open(ip);
+    for (let n = 0; n < 3; n++) {
+      send(a, { type: "join", sessionId: `missing-${n}` });
+      expect(await frame(a)).toEqual({ type: "error", code: "not-found" });
+    }
+    await request(t.server).get("/info").set("X-Forwarded-For", ip).expect(418);
+  });
+
+  it("counts WebSocket upgrades against the HTTP request budget", async () => {
+    const ip = "10.10.3.1";
+    for (let n = 0; n < 10; n++) await open(ip);
+    await expect(connect(port, ip)).rejects.toThrow("429");
+  });
+});
+
+it("bypasses P2P abuse limits when limits are disabled", async () => {
+  const t = await createTestApp({
+    P2P_ENABLED: "true",
+    LIMITS_DISABLED: "true",
+    P2P_MAX_MESSAGES_PER_MINUTE: "1",
+    LIMITS_MAX_REQUESTS_PER_IP_PER_MINUTE: "1",
+    LIMITS_BAN_AFTER_FAILED_REQUESTS: "1",
+  });
+  const sockets: WebSocket[] = [];
+  try {
+    const port = await t.listen();
+    const a = await connect(port, "10.11.1.1");
+    sockets.push(a);
+    const b = await connect(port, "10.11.1.1");
+    sockets.push(b);
+    for (let n = 0; n < 3; n++) {
+      send(a, { type: "join", sessionId: `missing-${n}` });
+      expect(await frame(a)).toEqual({ type: "error", code: "not-found" });
+    }
+    await request(t.server)
+      .get("/info")
+      .set("X-Forwarded-For", "10.11.1.1")
+      .expect(200);
+  } finally {
+    sockets.forEach((ws) => ws.terminate());
     await t.close();
   }
 });
