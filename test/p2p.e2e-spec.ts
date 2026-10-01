@@ -620,6 +620,9 @@ it("reaps an expired room peer on a join-only replica", async () => {
       ]),
     ).toEqual({ type: "error", code: "not-found" });
     await waitUntil(() => joiner!.readyState === WebSocket.CLOSED);
+    await waitUntil(
+      () => !(joinerApp.app.get(P2PSessionService) as any).sweepTimer,
+    );
   } finally {
     jest.restoreAllMocks();
     creator?.terminate();
@@ -905,6 +908,29 @@ describe("P2P disconnect during Valkey admission", () => {
     expect(
       await base.zscore(`not3:p2p:ip:${ip}`, created.session.id),
     ).toBeNull();
+  });
+
+  it("releases the local creator slot when a leave notification fails", async () => {
+    const ip = "10.16.7.1";
+    const creatorSessions = host.app.get(P2PSessionService);
+    const joinedSessions = guest.app.get(P2PSessionService);
+    const created = await creatorSessions.relayCreate(
+      ip,
+      { send: jest.fn(), kill: jest.fn() },
+      "room",
+    );
+    if (created === "too-many") throw new Error("creator rejected");
+    await joinedSessions.relayJoin(created.session.id, {
+      send: jest.fn(),
+      kill: jest.fn(),
+    });
+    jest
+      .spyOn(host.app.get(ValkeyService), "p2pPublish")
+      .mockRejectedValueOnce(new Error("publish failed"));
+    await expect(
+      creatorSessions.relayLeave(created.session.id, created.peerId),
+    ).rejects.toThrow("publish failed");
+    expect(creatorSessions.sessionsForIp(ip)).toBe(0);
   });
 });
 

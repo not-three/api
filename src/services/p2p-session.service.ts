@@ -78,6 +78,7 @@ export class P2PSessionService
       if (!(await this.valkey!.p2pSessionExists(id))) {
         this.destroy(id, false);
         this.relayPeers.delete(id);
+        this.stopSweepIfIdle();
       }
     }
     const result = this.create(ip, handle, kind);
@@ -157,6 +158,7 @@ export class P2PSessionService
         const local = this.relayPeers.get(id);
         local?.delete(peerId);
         if (local && !local.size) this.relayPeers.delete(id);
+        this.stopSweepIfIdle();
         throw err;
       }
     }
@@ -195,13 +197,14 @@ export class P2PSessionService
     );
     local.delete(peerId);
     if (!local.size) this.relayPeers.delete(id);
+    this.stopSweepIfIdle();
+    if (this.sessions.get(id)?.creatorId === peerId) this.destroy(id, false);
     if (updated)
       for (const targetPeerId of updated.peers)
         await this.publishRelay(id, targetPeerId, {
           type: "peer-left",
           peerId,
         });
-    if (this.sessions.get(id)?.creatorId === peerId) this.destroy(id, false);
   }
 
   async relayLeaveFor(handle: P2PPeerHandle): Promise<void> {
@@ -223,6 +226,7 @@ export class P2PSessionService
       }
       count++;
     }
+    this.stopSweepIfIdle();
     return count;
   }
 
@@ -296,6 +300,12 @@ export class P2PSessionService
       else this.sweepStale();
     }, 60_000);
     this.sweepTimer.unref();
+  }
+
+  private stopSweepIfIdle(): void {
+    if (this.sessions.size || this.relayPeers.size || !this.sweepTimer) return;
+    clearInterval(this.sweepTimer);
+    this.sweepTimer = undefined;
   }
 
   join(
@@ -381,6 +391,7 @@ export class P2PSessionService
     const ids = this.byIp.get(session.ip);
     ids?.delete(id);
     if (!ids?.size) this.byIp.delete(session.ip);
+    this.stopSweepIfIdle();
   }
 
   destroyAllFor(handle: P2PPeerHandle): void {
