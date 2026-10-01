@@ -213,4 +213,36 @@ describe("ValkeyService", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(await svc.p2pSessionExists("late-touch")).toBe(false);
   });
+
+  it("holds the creator IP quota until an empty room's grace expires", async () => {
+    const ip = "10.20.1.1";
+    expect(await svc.p2pReserveIpSession(ip, "room", 1, 40)).toBe(true);
+    await svc.p2pRegisterSession("room", "room", "creator", 3, 40, ip);
+    await svc.p2pLeaveSession("room", "creator", 200);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(await svc.p2pSessionExists("room")).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "another", 1, 40)).toBe(false);
+  });
+
+  it("does not shorten an older IP reservation when another is reserved", async () => {
+    const ip = "10.20.1.2";
+    expect(await svc.p2pReserveIpSession(ip, "older", 2, 1000)).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "newer", 2, 40)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(
+      await svc.getClient().zscore("not3:p2p:ip:" + ip, "older"),
+    ).not.toBeNull();
+  });
+
+  it("does not shorten another IP reservation when a session is touched", async () => {
+    const ip = "10.20.1.3";
+    expect(await svc.p2pReserveIpSession(ip, "older", 2, 1000)).toBe(true);
+    expect(await svc.p2pReserveIpSession(ip, "touched", 2, 1000)).toBe(true);
+    await svc.p2pRegisterSession("touched", "transfer", "creator", 2, 1000, ip);
+    await svc.p2pTouchSession("touched", 40);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(
+      await svc.getClient().zscore("not3:p2p:ip:" + ip, "older"),
+    ).not.toBeNull();
+  });
 });

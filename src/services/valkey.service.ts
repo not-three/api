@@ -106,8 +106,12 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     const script = `
       redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
       if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
+      local hadQuota = redis.call('EXISTS', KEYS[1])
       redis.call('ZADD', KEYS[1], tonumber(ARGV[1]) + tonumber(ARGV[2]), ARGV[4])
-      redis.call('PEXPIRE', KEYS[1], ARGV[2])
+      local quotaTtl = redis.call('PTTL', KEYS[1])
+      if hadQuota == 0 or (quotaTtl >= 0 and quotaTtl < tonumber(ARGV[2])) then
+        redis.call('PEXPIRE', KEYS[1], ARGV[2])
+      end
       return 1
     `;
     const result = await this.getClient().eval(
@@ -219,7 +223,12 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
         redis.call('PEXPIRE', KEYS[1], ARGV[4])
         redis.call('PEXPIRE', KEYS[2], ARGV[4])
         if ARGV[7] == '1' then
+          local hadQuota = redis.call('EXISTS', KEYS[3])
           redis.call('ZADD', KEYS[3], tonumber(ARGV[6]) + tonumber(ARGV[4]), ARGV[5])
+          local quotaTtl = redis.call('PTTL', KEYS[3])
+          if hadQuota == 0 or (quotaTtl >= 0 and quotaTtl < tonumber(ARGV[4])) then
+            redis.call('PEXPIRE', KEYS[3], ARGV[4])
+          end
         end
       end
       return remaining
@@ -251,8 +260,12 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
       redis.call('PEXPIRE', KEYS[1], ARGV[1])
       redis.call('PEXPIRE', KEYS[2], ARGV[1])
       if ARGV[4] == '1' then
+        local hadQuota = redis.call('EXISTS', KEYS[3])
         redis.call('ZADD', KEYS[3], tonumber(ARGV[2]) + tonumber(ARGV[1]), ARGV[3])
-        redis.call('PEXPIRE', KEYS[3], ARGV[1])
+        local quotaTtl = redis.call('PTTL', KEYS[3])
+        if hadQuota == 0 or (quotaTtl >= 0 and quotaTtl < tonumber(ARGV[1])) then
+          redis.call('PEXPIRE', KEYS[3], ARGV[1])
+        end
       end
       return 1
     `;

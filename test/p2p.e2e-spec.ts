@@ -29,7 +29,8 @@ const RedisMock = require("ioredis-mock");
  * [x] /p2p only, JSON text only, invalid forwarded IP returns 511, disabled
  *     upgrade stays unavailable: "rejects invalid forwarded IPs and upgrades
  *     outside /p2p", "rejects non-JSON and binary signaling frames", "does
- *     not accept WebSocket upgrades while P2P is disabled".
+ *     not accept WebSocket upgrades while P2P is disabled", "closes malformed
+ *     upgrade targets without rejecting the handler".
  * [x] Transfer create/join replies (sessionId, kind, unique 8-16 character
  *     peerIds, STUN ICE), one receiver, opaque bidirectional signals with
  *     `from` and ignored transfer `to`, leave/rejoin and peer notifications:
@@ -81,6 +82,11 @@ const RedisMock = require("ioredis-mock");
  *     after empty grace", "allocates unique peer IDs and limits sessions per
  *     creator IP" (also checks unref'd sweep); "applies the creator IP session
  *     cap across replicas".
+ * [x] Creator IP quota lasts through empty-room grace without shortening
+ *     reservations for other sessions: src/services/valkey.service.spec.ts
+ *     "holds the creator IP quota until an empty room's grace expires",
+ *     "does not shorten an older IP reservation when another is reserved",
+ *     "does not shorten another IP reservation when a session is touched".
  *
  * Grace and TTL
  * [x] Local room grace, cancel on rejoin, eventual expiry, idle TTL and touch:
