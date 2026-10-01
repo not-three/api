@@ -250,6 +250,32 @@ describe("P2P gateway", () => {
     expect(await frame(b)).toEqual({ type: "error", code: "invalid-message" });
   });
 
+  it("closes a peer after an unmasked wire frame and continues serving", async () => {
+    const ip = "10.9.7.1";
+    const peer = await open(ip);
+    send(peer, { type: "create" });
+    expect((await frame(peer)).type).toBe("created");
+    const closed = new Promise<void>((resolve) =>
+      peer.once("close", () => resolve()),
+    );
+    peer.on("error", () => undefined);
+    (peer as any)._socket.write(Buffer.from([0x81, 0x02, 0x7b, 0x7d]));
+    await closed;
+    await waitUntil(() => t.app.get(P2PSessionService).sessionsForIp(ip) === 0);
+    const next = await open(ip);
+    send(next, { type: "create" });
+    expect((await frame(next)).type).toBe("created");
+  });
+
+  it("limits parser buffering near the configured frame size", async () => {
+    const peer = await open("10.9.7.2");
+    const closed = new Promise<number>((resolve) =>
+      peer.once("close", (code) => resolve(code)),
+    );
+    peer.send("x".repeat(200_000));
+    expect(await closed).toBe(1009);
+  });
+
   it("rejects banned IPs during upgrade", async () => {
     await t.app.get(DatabaseService).ban("10.9.9.9");
     await expect(connect(port, "10.9.9.9")).rejects.toThrow("418");

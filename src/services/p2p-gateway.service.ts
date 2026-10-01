@@ -56,7 +56,13 @@ export class P2PGatewayService
   onApplicationBootstrap(): void {
     if (!this.config.get().p2p.enabled) return;
     this.server = this.adapter.httpAdapter.getHttpServer() as Server;
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: Math.min(
+        2_147_483_647,
+        Math.max(1024, this.config.get().p2p.maxMessageBytes * 2),
+      ),
+    });
     this.server.on("upgrade", this.upgradeHandler);
     this.heartbeat = setInterval(() => {
       for (const [ws, state] of this.states) {
@@ -164,6 +170,10 @@ export class P2PGatewayService
     this.states.set(ws, state);
     ws.on("pong", () => {
       state.alive = true;
+    });
+    ws.on("error", (err) => {
+      this.logger.warn(`P2P socket error: ${err.message}`);
+      ws.terminate();
     });
     ws.on("message", (raw, binary) => {
       state.processing = state.processing

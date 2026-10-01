@@ -95,6 +95,22 @@ describe("P2PSessionService", () => {
     expect(svc.get(first.session.id)).toBeNull();
   });
 
+  it("preserves the full room grace after the final peer leaves near idle TTL", async () => {
+    const created = svc.create("a", handle(), "room");
+    if (created === "too-many") throw Error();
+    created.session.lastActivity = Date.now() - 31 * 60_000;
+    svc.leave(created.session.id, created.peerId);
+    expect(svc.sweepStale()).toBe(0);
+    const joined = svc.join(created.session.id, handle());
+    expect(joined).not.toBe("not-found");
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(svc.get(created.session.id)).not.toBeNull();
+    if (typeof joined === "string") throw Error();
+    svc.leave(created.session.id, joined.peerId);
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(svc.get(created.session.id)).toBeNull();
+  });
+
   it("destroys transfer when sender dies and frees receiver when it dies", () => {
     const a = handle(),
       b = handle();

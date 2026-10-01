@@ -407,7 +407,7 @@ export class P2PSessionService
     const cutoff =
       Date.now() - this.config.get().p2p.sessionTtlMinutes * 60_000;
     for (const session of [...this.sessions.values()])
-      if (session.lastActivity < cutoff) {
+      if (!session.graceTimer && session.lastActivity < cutoff) {
         this.destroy(session.id);
         count++;
       }
