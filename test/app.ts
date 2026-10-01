@@ -3,8 +3,6 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "src/app.module";
 import { ValkeyService } from "src/services/valkey.service";
 import { ConfigService } from "src/services/config.service";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
-import { createCache } from "cache-manager";
 import Valkey from "iovalkey";
 
 export interface TestApp {
@@ -64,7 +62,6 @@ export async function createTestApp(
       factory: (config: ConfigService) => new AppValkeyService(config),
       inject: [ConfigService],
     });
-    builder.overrideProvider(CACHE_MANAGER).useValue(createCache());
   }
   const moduleRef = await builder.compile();
 

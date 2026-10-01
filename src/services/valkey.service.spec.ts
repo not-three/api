@@ -168,6 +168,14 @@ describe("ValkeyService", () => {
     expect((await svc.p2pGetSession("race"))?.peers).toHaveLength(2);
   });
 
+  it("rejects a duplicate peer ID within a session", async () => {
+    await svc.p2pRegisterSession("peer-id", "room", "creator", 3, 60_000);
+    expect(await svc.p2pJoinSession("peer-id", "creator", 60_000)).toBe(
+      "duplicate-peer",
+    );
+    expect((await svc.p2pGetSession("peer-id"))?.peers).toEqual(["creator"]);
+  });
+
   it("starts room grace when the final peers leave concurrently", async () => {
     await svc.p2pRegisterSession("empty-race", "room", "creator", 3, 60_000);
     await svc.p2pJoinSession("empty-race", "other", 60_000);

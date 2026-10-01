@@ -160,12 +160,14 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
       }
     | "not-found"
     | "session-full"
+    | "duplicate-peer"
   > {
     const session = await this.p2pGetSession(id);
     if (!session) return "not-found";
     const script = `
       if redis.call('EXISTS', KEYS[1]) == 0 then return {'__not_found__'} end
       local peers = redis.call('LRANGE', KEYS[2], 0, -1)
+      for _, peer in ipairs(peers) do if peer == ARGV[1] then return {'__duplicate_peer__'} end end
       if #peers >= tonumber(ARGV[2]) then return {'__session_full__'} end
       redis.call('RPUSH', KEYS[2], ARGV[1])
       redis.call('PEXPIRE', KEYS[1], ARGV[3])
@@ -182,6 +184,7 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
       ttlMs,
     )) as string[];
     if (peers[0] === "__not_found__") return "not-found";
+    if (peers[0] === "__duplicate_peer__") return "duplicate-peer";
     if (peers[0] === "__session_full__") return "session-full";
     await this.p2pTouchSession(id, ttlMs);
     return { ...session, peers };

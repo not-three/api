@@ -18,8 +18,7 @@ interface PeerState {
   handle: P2PPeerHandle;
   sessionId?: string;
   peerId?: string;
-  windowStart: number;
-  messageCount: number;
+  messageTimes: number[];
   alive: boolean;
 }
 
@@ -131,8 +130,7 @@ export class P2PGatewayService
     const state: PeerState = {
       ip,
       handle,
-      windowStart: Date.now(),
-      messageCount: 0,
+      messageTimes: [],
       alive: true,
     };
     this.states.set(ws, state);
@@ -186,14 +184,12 @@ export class P2PGatewayService
   ): Promise<void> {
     const cfg = this.config.get().p2p;
     const now = Date.now();
-    if (now - state.windowStart >= 60_000) {
-      state.windowStart = now;
-      state.messageCount = 0;
-    }
-    state.messageCount++;
+    while (state.messageTimes.length && state.messageTimes[0] <= now - 60_000)
+      state.messageTimes.shift();
+    state.messageTimes.push(now);
     if (
       !this.config.get().limits.disabled &&
-      state.messageCount > cfg.maxMessagesPerMinute
+      state.messageTimes.length > cfg.maxMessagesPerMinute
     ) {
       await this.fail(ws, state, "rate-limited");
       return;

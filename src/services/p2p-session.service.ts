@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
   Optional,
@@ -36,6 +37,7 @@ export class P2PSessionService
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
   private readonly sessions = new Map<string, P2PSession>();
+  private readonly logger = new Logger(P2PSessionService.name);
   private readonly byIp = new Map<string, Set<string>>();
   private sweepTimer?: ReturnType<typeof setInterval>;
   private readonly origin = randomUUID();
@@ -110,21 +112,29 @@ export class P2PSessionService
     | "not-found"
     | "session-full"
   > {
-    const peerId = nanoId(12);
-    const joined = await this.valkey!.p2pJoinSession(id, peerId, this.ttlMs());
-    if (typeof joined === "string") return joined;
-    this.attachRelay(id, peerId, handle);
-    for (const targetPeerId of joined.peers)
-      await this.publishRelay(id, targetPeerId, {
-        type: "peer-joined",
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const peerId = nanoId(12);
+      const joined = await this.valkey!.p2pJoinSession(
+        id,
         peerId,
-      });
-    this.touch(id);
-    return {
-      kind: joined.kind,
-      peerId,
-      peers: joined.kind === "room" ? joined.peers : [],
-    };
+        this.ttlMs(),
+      );
+      if (joined === "duplicate-peer") continue;
+      if (typeof joined === "string") return joined;
+      this.attachRelay(id, peerId, handle);
+      for (const targetPeerId of joined.peers)
+        await this.publishRelay(id, targetPeerId, {
+          type: "peer-joined",
+          peerId,
+        });
+      this.touch(id);
+      return {
+        kind: joined.kind,
+        peerId,
+        peers: joined.kind === "room" ? joined.peers : [],
+      };
+    }
+    throw new Error("Could not allocate a unique P2P peer ID");
   }
 
   async relaySend(
@@ -173,6 +183,22 @@ export class P2PSessionService
         if (current === handle) await this.relayLeave(id, peerId);
   }
 
+  async sweepRelayed(): Promise<number> {
+    if (!this.relayEnabled()) return 0;
+    let count = 0;
+    for (const [id, peers] of [...this.relayPeers]) {
+      if (await this.valkey!.p2pSessionExists(id)) continue;
+      this.relayPeers.delete(id);
+      this.destroy(id, false);
+      for (const handle of peers.values()) {
+        this.safeSend(handle, { type: "error", code: "not-found" });
+        this.safeKill(handle);
+      }
+      count++;
+    }
+    return count;
+  }
+
   private attachRelay(id: string, peerId: string, handle: P2PPeerHandle): void {
     const peers = this.relayPeers.get(id) ?? new Map<string, P2PPeerHandle>();
     peers.set(peerId, handle);
@@ -210,7 +236,7 @@ export class P2PSessionService
     if (this.sessionsForIp(ip) >= cfg.maxSessionsPerIp) return "too-many";
     let id: string;
     do {
-      id = nanoId(21);
+      id = nanoId(this.config.get().idLength);
     } while (this.sessions.has(id));
     const peerId = nanoId(12);
     const now = Date.now();
@@ -229,7 +255,13 @@ export class P2PSessionService
     ids.add(id);
     this.byIp.set(ip, ids);
     if (!this.sweepTimer) {
-      this.sweepTimer = setInterval(() => this.sweepStale(), 60_000);
+      this.sweepTimer = setInterval(() => {
+        if (this.relayEnabled())
+          void this.sweepRelayed().catch((err) =>
+            this.logger.warn(`P2P sweep failed: ${(err as Error).message}`),
+          );
+        else this.sweepStale();
+      }, 60_000);
       this.sweepTimer.unref();
     }
     return { session, peerId, peers: [] };

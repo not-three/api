@@ -3,6 +3,7 @@ import { P2PSessionService, P2PPeerHandle } from "./p2p-session.service";
 const handle = (): P2PPeerHandle => ({ send: jest.fn(), kill: jest.fn() });
 const config = {
   get: () => ({
+    idLength: 8,
     p2p: {
       sessionTtlMinutes: 30,
       maxSessionsPerIp: 2,
@@ -23,7 +24,7 @@ describe("P2PSessionService", () => {
     const first = svc.create("10.0.0.1", handle());
     expect(first).not.toBe("too-many");
     if (first === "too-many") return;
-    expect(first.session.id).toMatch(/^.{21}$/);
+    expect(first.session.id).toMatch(/^.{8}$/);
     expect(first.peerId).toMatch(/^.{8,16}$/);
     svc.create("10.0.0.1", handle());
     expect(svc.create("10.0.0.1", handle())).toBe("too-many");

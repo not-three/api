@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import { createTestApp, TestApp } from "./app";
 import { DatabaseService } from "src/services/database.service";
 import { ValkeyService } from "src/services/valkey.service";
+import { P2PSessionService } from "src/services/p2p-session.service";
 import request from "supertest";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RedisMock = require("ioredis-mock");
@@ -217,6 +218,28 @@ it("does not accept WebSocket upgrades while P2P is disabled", async () => {
   }
 });
 
+it("rejects room creation when only transfer signaling is enabled", async () => {
+  const t = await createTestApp({
+    P2P_ENABLED: "true",
+    P2P_ROOMS_ENABLED: "false",
+  });
+  let ws: WebSocket | undefined;
+  try {
+    const port = await t.listen();
+    ws = await connect(port, "10.9.8.2");
+    send(ws, { type: "create", kind: "room" });
+    expect(await frame(ws)).toEqual({ type: "error", code: "disabled" });
+    const info = await request(t.server)
+      .get("/info")
+      .set("X-Forwarded-For", "10.9.8.2")
+      .expect(200);
+    expect(info.body).toMatchObject({ p2pEnabled: true, p2pRooms: false });
+  } finally {
+    ws?.terminate();
+    await t.close();
+  }
+});
+
 describe("P2P abuse accounting", () => {
   let t: TestApp, port: number;
   const sockets: WebSocket[] = [];
@@ -247,6 +270,27 @@ describe("P2P abuse accounting", () => {
     }
     send(a, { type: "join", sessionId: "absent-6" });
     expect(await frame(a)).toEqual({ type: "error", code: "rate-limited" });
+  });
+
+  it("counts messages over a rolling minute across a window boundary", async () => {
+    const now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const peer = await open("10.10.1.2");
+      clock.mockReturnValue(now + 59_000);
+      for (let n = 0; n < 5; n++) {
+        send(peer, { type: "join", sessionId: `rolling-${n}` });
+        expect(await frame(peer)).toEqual({ type: "error", code: "not-found" });
+      }
+      clock.mockReturnValue(now + 61_000);
+      send(peer, { type: "join", sessionId: "rolling-six" });
+      expect(await frame(peer)).toEqual({
+        type: "error",
+        code: "rate-limited",
+      });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("bans failed joins through the shared HTTP ban store", async () => {
@@ -455,6 +499,8 @@ describe("P2P Valkey relay", () => {
     send(creator, { type: "create" });
     const created = await frame(creator);
     await a.app.get(ValkeyService).p2pDeleteSession(created.sessionId);
+    await a.app.get(P2PSessionService).sweepRelayed();
+    expect(await frame(creator)).toEqual({ type: "error", code: "not-found" });
     const next = await open(0, "10.12.5.1");
     send(next, { type: "create" });
     expect((await frame(next)).type).toBe("created");
