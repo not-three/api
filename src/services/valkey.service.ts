@@ -12,6 +12,7 @@ import { Note } from "src/types/db/Note";
 export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(ValkeyService.name);
   private client: Valkey | null = null;
+  private subscriber: Valkey | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -52,6 +53,10 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
   // DatabaseService flushes its valkey-backed write buffer in one of them.
   // Closing the client earlier would make that flush fail.
   async onApplicationShutdown() {
+    if (this.subscriber) {
+      await this.subscriber.quit();
+      this.subscriber = null;
+    }
     if (this.client) {
       await this.client.quit();
       this.client = null;
@@ -69,6 +74,227 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
 
   private key(...parts: string[]): string {
     return [this.config.get().valkey.keyPrefix, ...parts].join(":");
+  }
+
+  async p2pRegisterSession(
+    id: string,
+    kind: "transfer" | "room",
+    creatorId: string,
+    maxPeers: number,
+    ttlMs: number,
+    ip?: string,
+  ): Promise<void> {
+    const metadata = this.key("p2p", "session", id);
+    const members = this.key("p2p", "peers", id);
+    await this.getClient().set(
+      metadata,
+      JSON.stringify({ kind, creatorId, maxPeers, ip }),
+      "PX",
+      ttlMs,
+    );
+    await this.getClient().rpush(members, creatorId);
+    await this.getClient().pexpire(members, ttlMs);
+  }
+
+  async p2pReserveIpSession(
+    ip: string,
+    id: string,
+    maxSessions: number,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const script = `
+      redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+      if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
+      redis.call('ZADD', KEYS[1], tonumber(ARGV[1]) + tonumber(ARGV[2]), ARGV[4])
+      redis.call('PEXPIRE', KEYS[1], ARGV[2])
+      return 1
+    `;
+    const result = await this.getClient().eval(
+      script,
+      1,
+      this.key("p2p", "ip", ip),
+      Date.now(),
+      ttlMs,
+      maxSessions,
+      id,
+    );
+    return Number(result) === 1;
+  }
+
+  async p2pReleaseIpSession(ip: string, id: string): Promise<void> {
+    await this.getClient().zrem(this.key("p2p", "ip", ip), id);
+  }
+
+  async p2pSessionExists(id: string): Promise<boolean> {
+    return (
+      (await this.getClient().exists(this.key("p2p", "session", id))) === 1
+    );
+  }
+
+  async p2pGetSession(id: string): Promise<{
+    kind: "transfer" | "room";
+    creatorId: string;
+    maxPeers: number;
+    ip?: string;
+    peers: string[];
+  } | null> {
+    const raw = await this.getClient().get(this.key("p2p", "session", id));
+    if (!raw) return null;
+    return {
+      ...JSON.parse(raw),
+      peers: await this.getClient().lrange(this.key("p2p", "peers", id), 0, -1),
+    };
+  }
+
+  async p2pJoinSession(
+    id: string,
+    peerId: string,
+    ttlMs: number,
+  ): Promise<
+    | {
+        kind: "transfer" | "room";
+        creatorId: string;
+        maxPeers: number;
+        ip?: string;
+        peers: string[];
+      }
+    | "not-found"
+    | "session-full"
+  > {
+    const session = await this.p2pGetSession(id);
+    if (!session) return "not-found";
+    const script = `
+      if redis.call('EXISTS', KEYS[1]) == 0 then return {'__not_found__'} end
+      local peers = redis.call('LRANGE', KEYS[2], 0, -1)
+      if #peers >= tonumber(ARGV[2]) then return {'__session_full__'} end
+      redis.call('RPUSH', KEYS[2], ARGV[1])
+      redis.call('PEXPIRE', KEYS[1], ARGV[3])
+      redis.call('PEXPIRE', KEYS[2], ARGV[3])
+      return peers
+    `;
+    const peers = (await this.getClient().eval(
+      script,
+      2,
+      this.key("p2p", "session", id),
+      this.key("p2p", "peers", id),
+      peerId,
+      session.maxPeers,
+      ttlMs,
+    )) as string[];
+    if (peers[0] === "__not_found__") return "not-found";
+    if (peers[0] === "__session_full__") return "session-full";
+    await this.p2pTouchSession(id, ttlMs);
+    return { ...session, peers };
+  }
+
+  async p2pLeaveSession(
+    id: string,
+    peerId: string,
+    graceMs: number,
+  ): Promise<{
+    kind: "transfer" | "room";
+    creatorId: string;
+    maxPeers: number;
+    ip?: string;
+    peers: string[];
+  } | null> {
+    const session = await this.p2pGetSession(id);
+    if (!session) return null;
+    const script = `
+      if redis.call('EXISTS', KEYS[1]) == 0 then return {'__not_found__'} end
+      local peers = redis.call('LRANGE', KEYS[2], 0, -1)
+      local found = false
+      for _, peer in ipairs(peers) do if peer == ARGV[1] then found = true end end
+      if not found then return {'__not_found__'} end
+      redis.call('LREM', KEYS[2], 0, ARGV[1])
+      local remaining = redis.call('LRANGE', KEYS[2], 0, -1)
+      if ARGV[2] == 'transfer' and ARGV[1] == ARGV[3] then
+        redis.call('DEL', KEYS[1], KEYS[2])
+      elseif ARGV[2] == 'room' and #remaining == 0 then
+        redis.call('PEXPIRE', KEYS[1], ARGV[4])
+        redis.call('PEXPIRE', KEYS[2], ARGV[4])
+      end
+      return remaining
+    `;
+    const peers = (await this.getClient().eval(
+      script,
+      2,
+      this.key("p2p", "session", id),
+      this.key("p2p", "peers", id),
+      peerId,
+      session.kind,
+      session.creatorId,
+      Math.max(1, graceMs),
+    )) as string[];
+    if (peers[0] === "__not_found__") return null;
+    session.peers = peers;
+    if (
+      session.ip &&
+      session.kind === "transfer" &&
+      peerId === session.creatorId
+    )
+      await this.p2pReleaseIpSession(session.ip, id);
+    else if (session.ip && session.kind === "room" && peers.length === 0)
+      await this.getClient().zadd(
+        this.key("p2p", "ip", session.ip),
+        Date.now() + Math.max(1, graceMs),
+        id,
+      );
+    return session;
+  }
+
+  async p2pTouchSession(id: string, ttlMs: number): Promise<void> {
+    const session = await this.p2pGetSession(id);
+    if (!session) return;
+    const script = `
+      if redis.call('EXISTS', KEYS[1]) == 0 or redis.call('LLEN', KEYS[2]) == 0 then return 0 end
+      redis.call('PEXPIRE', KEYS[1], ARGV[1])
+      redis.call('PEXPIRE', KEYS[2], ARGV[1])
+      if ARGV[4] == '1' then
+        redis.call('ZADD', KEYS[3], tonumber(ARGV[2]) + tonumber(ARGV[1]), ARGV[3])
+        redis.call('PEXPIRE', KEYS[3], ARGV[1])
+      end
+      return 1
+    `;
+    await this.getClient().eval(
+      script,
+      3,
+      this.key("p2p", "session", id),
+      this.key("p2p", "peers", id),
+      this.key("p2p", "ip", session.ip ?? "none"),
+      ttlMs,
+      Date.now(),
+      id,
+      session.ip ? "1" : "0",
+    );
+  }
+
+  async p2pDeleteSession(id: string): Promise<void> {
+    const session = await this.p2pGetSession(id);
+    if (session?.ip) await this.p2pReleaseIpSession(session.ip, id);
+    await this.getClient().del(
+      this.key("p2p", "session", id),
+      this.key("p2p", "peers", id),
+    );
+  }
+
+  async p2pPublish(msg: object): Promise<void> {
+    await this.getClient().publish(this.key("p2p", "bus"), JSON.stringify(msg));
+  }
+
+  async p2pSubscribe(callback: (msg: any) => void): Promise<void> {
+    if (this.subscriber) return;
+    this.subscriber = this.createClient();
+    const channel = this.key("p2p", "bus");
+    this.subscriber.on("message", (received, raw) => {
+      if (received !== channel) return;
+      try {
+        callback(JSON.parse(raw));
+      } catch (err) {
+        this.logger.warn(`Invalid P2P bus message: ${(err as Error).message}`);
+      }
+    });
+    await this.subscriber.subscribe(channel);
   }
 
   async createRequest(

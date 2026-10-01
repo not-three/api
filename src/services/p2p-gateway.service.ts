@@ -147,7 +147,11 @@ export class P2PGatewayService
     });
     ws.on("close", () => {
       this.states.delete(ws);
-      this.sessions.destroyAllFor(handle);
+      if (this.sessions.relayEnabled())
+        void this.sessions
+          .relayLeaveFor(handle)
+          .catch((err) => this.logger.warn((err as Error).message));
+      else this.sessions.destroyAllFor(handle);
     });
   }
 
@@ -230,7 +234,9 @@ export class P2PGatewayService
         state.handle.send({ type: "error", code: "disabled" });
         return;
       }
-      const result = this.sessions.create(state.ip, state.handle, kind);
+      const result = this.sessions.relayEnabled()
+        ? await this.sessions.relayCreate(state.ip, state.handle, kind)
+        : this.sessions.create(state.ip, state.handle, kind);
       if (result === "too-many") {
         state.handle.send({ type: "error", code: "rate-limited" });
         return;
@@ -255,19 +261,21 @@ export class P2PGatewayService
         await this.fail(ws, state, "invalid-message");
         return;
       }
-      const result = this.sessions.join(frame.sessionId, state.handle);
+      const result = this.sessions.relayEnabled()
+        ? await this.sessions.relayJoin(frame.sessionId, state.handle)
+        : this.sessions.join(frame.sessionId, state.handle);
       if (typeof result === "string") {
         await this.recordFailure(state.ip);
         state.handle.send({ type: "error", code: result });
         return;
       }
-      state.sessionId = result.session.id;
+      state.sessionId = frame.sessionId;
       state.peerId = result.peerId;
       state.handle.send({
         type: "joined",
-        sessionId: result.session.id,
+        sessionId: frame.sessionId,
         iceServers: cfg.iceServers(),
-        kind: result.session.kind,
+        kind: "session" in result ? result.session.kind : result.kind,
         peerId: result.peerId,
         peers: result.peers,
       });
@@ -278,32 +286,49 @@ export class P2PGatewayService
         await this.fail(ws, state, "invalid-message");
         return;
       }
-      this.sessions.leave(state.sessionId, state.peerId);
+      if (this.sessions.relayEnabled())
+        await this.sessions.relayLeave(state.sessionId, state.peerId);
+      else this.sessions.leave(state.sessionId, state.peerId);
       state.sessionId = undefined;
       state.peerId = undefined;
       return;
     }
     if (frame.type === "signal") {
       const session = state.sessionId
-        ? this.sessions.get(state.sessionId)
+        ? this.sessions.relayEnabled()
+          ? await this.sessions.relaySession(state.sessionId)
+          : this.sessions.get(state.sessionId)
         : null;
       if (
         !session ||
         !state.peerId ||
         !Object.prototype.hasOwnProperty.call(frame, "payload") ||
         (session.kind === "room" &&
-          (typeof frame.to !== "string" || !session.peers.has(frame.to)))
+          (typeof frame.to !== "string" ||
+            (Array.isArray(session.peers)
+              ? !session.peers.includes(frame.to)
+              : !session.peers.has(frame.to))))
       ) {
         await this.fail(ws, state, "invalid-message");
         return;
       }
-      if (
-        !this.sessions.send(session.id, state.peerId, frame.to, {
-          type: "signal",
-          from: state.peerId,
-          payload: frame.payload,
-        })
-      ) {
+      const delivered = this.sessions.relayEnabled()
+        ? await this.sessions.relaySend(
+            state.sessionId,
+            state.peerId,
+            frame.to,
+            {
+              type: "signal",
+              from: state.peerId,
+              payload: frame.payload,
+            },
+          )
+        : this.sessions.send(state.sessionId, state.peerId, frame.to, {
+            type: "signal",
+            from: state.peerId,
+            payload: frame.payload,
+          });
+      if (!delivered) {
         await this.fail(ws, state, "invalid-message");
       }
       return;

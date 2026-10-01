@@ -1,6 +1,11 @@
 import { Test } from "@nestjs/testing";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "src/app.module";
+import { ValkeyService } from "src/services/valkey.service";
+import { ConfigService } from "src/services/config.service";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { createCache } from "cache-manager";
+import Valkey from "iovalkey";
 
 export interface TestApp {
   app: NestExpressApplication;
@@ -22,6 +27,7 @@ const DEFAULT_ENV: Record<string, string> = {
 
 export async function createTestApp(
   env: Record<string, string> = {},
+  overrides: { valkeyClientFactory?: () => Valkey } = {},
 ): Promise<TestApp> {
   const applied = { ...DEFAULT_ENV, ...env };
   const previous: Record<string, string | undefined> = {};
@@ -30,9 +36,37 @@ export async function createTestApp(
     process.env[key] = value;
   }
 
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  });
+  if (overrides.valkeyClientFactory) {
+    const factory = overrides.valkeyClientFactory;
+    class AppValkeyService extends ValkeyService {
+      private readonly appClient = factory();
+      async onModuleInit(): Promise<void> {
+        await this.appClient.ping();
+      }
+      isEnabled(): boolean {
+        return true;
+      }
+      getClient(): Valkey {
+        return this.appClient;
+      }
+      protected createClient(): Valkey {
+        return factory();
+      }
+      async onApplicationShutdown(): Promise<void> {
+        await super.onApplicationShutdown();
+        await this.appClient.quit();
+      }
+    }
+    builder.overrideProvider(ValkeyService).useFactory({
+      factory: (config: ConfigService) => new AppValkeyService(config),
+      inject: [ConfigService],
+    });
+    builder.overrideProvider(CACHE_MANAGER).useValue(createCache());
+  }
+  const moduleRef = await builder.compile();
 
   // Mirrors main.ts: rawBody for the text endpoints, same parser limits.
   const app = moduleRef.createNestApplication<NestExpressApplication>({

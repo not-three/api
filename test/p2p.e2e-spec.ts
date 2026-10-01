@@ -1,7 +1,10 @@
 import WebSocket from "ws";
 import { createTestApp, TestApp } from "./app";
 import { DatabaseService } from "src/services/database.service";
+import { ValkeyService } from "src/services/valkey.service";
 import request from "supertest";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const RedisMock = require("ioredis-mock");
 
 type Frame = Record<string, any>;
 const inbox = new WeakMap<
@@ -290,4 +293,180 @@ it("bypasses P2P abuse limits when limits are disabled", async () => {
     sockets.forEach((ws) => ws.terminate());
     await t.close();
   }
+});
+
+describe("P2P Valkey relay", () => {
+  let a: TestApp, b: TestApp, c: TestApp;
+  let ports: number[];
+  const sockets: WebSocket[] = [];
+  const base = new RedisMock();
+  beforeAll(async () => {
+    const env = {
+      P2P_ENABLED: "true",
+      P2P_ROOM_MAX_PEERS: "3",
+      P2P_MAX_SESSIONS_PER_IP: "1",
+      P2P_ROOM_GRACE_SECONDS: "1",
+      DATABASE_REQUEST_OPTIMIZATION: "hard",
+      VALKEY_ENABLED: "false",
+      LIMITS_BAN_AFTER_FAILED_REQUESTS: "2",
+    };
+    const overrides = { valkeyClientFactory: () => base.duplicate() };
+    a = await createTestApp(env, overrides);
+    b = await createTestApp(env, overrides);
+    c = await createTestApp(env, overrides);
+    ports = [await a.listen(), await b.listen(), await c.listen()];
+  });
+  afterEach(() => sockets.splice(0).forEach((ws) => ws.terminate()));
+  afterAll(async () => {
+    await Promise.all([a.close(), b.close(), c.close()]);
+    await base.quit();
+  });
+  const open = async (index: number, ip: string) => {
+    const ws = await connect(ports[index], ip);
+    sockets.push(ws);
+    return ws;
+  };
+
+  it("relays transfer signaling between two replicas", async () => {
+    const sender = await open(0, "10.12.1.1"),
+      receiver = await open(1, "10.12.1.2");
+    send(sender, { type: "create" });
+    const created = await frame(sender);
+    send(receiver, { type: "join", sessionId: created.sessionId });
+    const joined = await frame(receiver);
+    expect(joined).toMatchObject({
+      type: "joined",
+      kind: "transfer",
+      peers: [],
+    });
+    expect(await frame(sender)).toEqual({
+      type: "peer-joined",
+      peerId: joined.peerId,
+    });
+    send(sender, { type: "signal", payload: { offer: "x" } });
+    expect(await frame(receiver)).toEqual({
+      type: "signal",
+      from: created.peerId,
+      payload: { offer: "x" },
+    });
+    send(receiver, { type: "signal", payload: { answer: "y" } });
+    expect(await frame(sender)).toEqual({
+      type: "signal",
+      from: joined.peerId,
+      payload: { answer: "y" },
+    });
+    send(receiver, { type: "leave" });
+    expect(await frame(sender)).toEqual({
+      type: "peer-left",
+      peerId: joined.peerId,
+    });
+  });
+
+  it("routes room signals by peer ID across three replicas", async () => {
+    const first = await open(0, "10.12.2.1"),
+      second = await open(1, "10.12.2.2"),
+      third = await open(2, "10.12.2.3");
+    send(first, { type: "create", kind: "room" });
+    const created = await frame(first);
+    send(second, { type: "join", sessionId: created.sessionId });
+    const joinedB = await frame(second);
+    expect(joinedB.peers).toEqual([created.peerId]);
+    expect(await frame(first)).toEqual({
+      type: "peer-joined",
+      peerId: joinedB.peerId,
+    });
+    send(third, { type: "join", sessionId: created.sessionId });
+    const joinedC = await frame(third);
+    expect(joinedC.peers).toEqual([created.peerId, joinedB.peerId]);
+    expect(await frame(first)).toEqual({
+      type: "peer-joined",
+      peerId: joinedC.peerId,
+    });
+    expect(await frame(second)).toEqual({
+      type: "peer-joined",
+      peerId: joinedC.peerId,
+    });
+    const overflow = await open(2, "10.12.2.4");
+    send(overflow, { type: "join", sessionId: created.sessionId });
+    expect(await frame(overflow)).toEqual({
+      type: "error",
+      code: "session-full",
+    });
+    send(second, { type: "signal", to: joinedC.peerId, payload: { for: "c" } });
+    expect(await frame(third)).toEqual({
+      type: "signal",
+      from: joinedB.peerId,
+      payload: { for: "c" },
+    });
+    send(third, { type: "signal", to: created.peerId, payload: { for: "a" } });
+    expect(await frame(first)).toEqual({
+      type: "signal",
+      from: joinedC.peerId,
+      payload: { for: "a" },
+    });
+    send(second, { type: "leave" });
+    expect(await frame(first)).toEqual({
+      type: "peer-left",
+      peerId: joinedB.peerId,
+    });
+    expect(await frame(third)).toEqual({
+      type: "peer-left",
+      peerId: joinedB.peerId,
+    });
+  });
+
+  it("applies the creator IP session cap across replicas", async () => {
+    const first = await open(0, "10.12.3.1");
+    const second = await open(1, "10.12.3.1");
+    send(first, { type: "create", kind: "room" });
+    expect((await frame(first)).type).toBe("created");
+    send(second, { type: "create" });
+    expect(await frame(second)).toEqual({
+      type: "error",
+      code: "rate-limited",
+    });
+    send(first, { type: "leave" });
+  });
+
+  it("allows a room to rejoin during grace and frees its IP quota after expiry", async () => {
+    const creator = await open(0, "10.12.4.1");
+    send(creator, { type: "create", kind: "room" });
+    const created = await frame(creator);
+    send(creator, { type: "leave" });
+    const rejoin = await open(1, "10.12.4.2");
+    send(rejoin, { type: "join", sessionId: created.sessionId });
+    expect(await frame(rejoin)).toMatchObject({
+      type: "joined",
+      sessionId: created.sessionId,
+      peers: [],
+    });
+    send(rejoin, { type: "leave" });
+    await new Promise((resolve) => setTimeout(resolve, 1150));
+    const late = await open(2, "10.12.4.3");
+    send(late, { type: "join", sessionId: created.sessionId });
+    expect(await frame(late)).toEqual({ type: "error", code: "not-found" });
+    const next = await open(0, "10.12.4.1");
+    send(next, { type: "create", kind: "room" });
+    expect((await frame(next)).type).toBe("created");
+  });
+
+  it("frees a local creator slot after Valkey expires its session", async () => {
+    const creator = await open(0, "10.12.5.1");
+    send(creator, { type: "create" });
+    const created = await frame(creator);
+    await a.app.get(ValkeyService).p2pDeleteSession(created.sessionId);
+    const next = await open(0, "10.12.5.1");
+    send(next, { type: "create" });
+    expect((await frame(next)).type).toBe("created");
+  });
+
+  it("shares failed-join bans with HTTP on another replica", async () => {
+    const ip = "10.12.6.1";
+    const peer = await open(1, ip);
+    for (let n = 0; n < 2; n++) {
+      send(peer, { type: "join", sessionId: `missing-${n}` });
+      expect(await frame(peer)).toEqual({ type: "error", code: "not-found" });
+    }
+    await request(a.server).get("/info").set("X-Forwarded-For", ip).expect(418);
+  });
 });

@@ -1,6 +1,13 @@
-import { Injectable, OnApplicationShutdown } from "@nestjs/common";
+import {
+  Injectable,
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+  Optional,
+} from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { nanoId } from "src/etc/esm-fix";
 import { ConfigService } from "./config.service";
+import { ValkeyService } from "./valkey.service";
 
 export type P2PKind = "transfer" | "room";
 export interface P2PPeerHandle {
@@ -25,12 +32,174 @@ export interface P2PJoin {
 }
 
 @Injectable()
-export class P2PSessionService implements OnApplicationShutdown {
+export class P2PSessionService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly sessions = new Map<string, P2PSession>();
   private readonly byIp = new Map<string, Set<string>>();
   private sweepTimer?: ReturnType<typeof setInterval>;
+  private readonly origin = randomUUID();
+  private readonly relayPeers = new Map<string, Map<string, P2PPeerHandle>>();
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly valkey?: ValkeyService,
+  ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    if (!this.config.get().p2p.enabled || !this.valkey?.isEnabled()) return;
+    await this.valkey.p2pSubscribe((message) => {
+      if (
+        message.origin === this.origin ||
+        typeof message.sessionId !== "string" ||
+        typeof message.targetPeerId !== "string"
+      )
+        return;
+      const target = this.relayPeers
+        .get(message.sessionId)
+        ?.get(message.targetPeerId);
+      if (target && message.frame && typeof message.frame === "object")
+        this.safeSend(target, message.frame);
+    });
+  }
+
+  relayEnabled(): boolean {
+    return !!this.valkey?.isEnabled();
+  }
+
+  async relayCreate(
+    ip: string,
+    handle: P2PPeerHandle,
+    kind: P2PKind,
+  ): Promise<P2PJoin | "too-many"> {
+    for (const id of [...(this.byIp.get(ip) ?? [])]) {
+      if (!(await this.valkey!.p2pSessionExists(id))) {
+        this.destroy(id, false);
+        this.relayPeers.delete(id);
+      }
+    }
+    const result = this.create(ip, handle, kind);
+    if (result === "too-many") return result;
+    const reserved = await this.valkey!.p2pReserveIpSession(
+      ip,
+      result.session.id,
+      this.config.get().p2p.maxSessionsPerIp,
+      this.ttlMs(),
+    );
+    if (!reserved) {
+      this.destroy(result.session.id, false);
+      return "too-many";
+    }
+    await this.valkey!.p2pRegisterSession(
+      result.session.id,
+      kind,
+      result.peerId,
+      result.session.maxPeers,
+      this.ttlMs(),
+      ip,
+    );
+    this.attachRelay(result.session.id, result.peerId, handle);
+    return result;
+  }
+
+  async relayJoin(
+    id: string,
+    handle: P2PPeerHandle,
+  ): Promise<
+    | { kind: P2PKind; peerId: string; peers: string[] }
+    | "not-found"
+    | "session-full"
+  > {
+    const peerId = nanoId(12);
+    const joined = await this.valkey!.p2pJoinSession(id, peerId, this.ttlMs());
+    if (typeof joined === "string") return joined;
+    this.attachRelay(id, peerId, handle);
+    for (const targetPeerId of joined.peers)
+      await this.publishRelay(id, targetPeerId, {
+        type: "peer-joined",
+        peerId,
+      });
+    this.touch(id);
+    return {
+      kind: joined.kind,
+      peerId,
+      peers: joined.kind === "room" ? joined.peers : [],
+    };
+  }
+
+  async relaySend(
+    id: string,
+    from: string,
+    to: string | undefined,
+    frame: object,
+  ): Promise<boolean> {
+    const session = await this.valkey!.p2pGetSession(id);
+    if (!session || !session.peers.includes(from)) return false;
+    const target =
+      session.kind === "transfer" ? session.peers.find((p) => p !== from) : to;
+    if (!target || target === from || !session.peers.includes(target))
+      return false;
+    await this.publishRelay(id, target, frame);
+    await this.valkey!.p2pTouchSession(id, this.ttlMs());
+    this.touch(id);
+    return true;
+  }
+
+  async relaySession(id: string) {
+    return this.valkey!.p2pGetSession(id);
+  }
+
+  async relayLeave(id: string, peerId: string): Promise<void> {
+    const local = this.relayPeers.get(id);
+    if (!local?.delete(peerId)) return;
+    if (!local.size) this.relayPeers.delete(id);
+    const updated = await this.valkey!.p2pLeaveSession(
+      id,
+      peerId,
+      this.config.get().p2p.roomGraceSeconds * 1000,
+    );
+    if (updated)
+      for (const targetPeerId of updated.peers)
+        await this.publishRelay(id, targetPeerId, {
+          type: "peer-left",
+          peerId,
+        });
+    if (this.sessions.get(id)?.creatorId === peerId) this.destroy(id, false);
+  }
+
+  async relayLeaveFor(handle: P2PPeerHandle): Promise<void> {
+    for (const [id, peers] of [...this.relayPeers])
+      for (const [peerId, current] of [...peers])
+        if (current === handle) await this.relayLeave(id, peerId);
+  }
+
+  private attachRelay(id: string, peerId: string, handle: P2PPeerHandle): void {
+    const peers = this.relayPeers.get(id) ?? new Map<string, P2PPeerHandle>();
+    peers.set(peerId, handle);
+    this.relayPeers.set(id, peers);
+  }
+
+  private async publishRelay(
+    id: string,
+    targetPeerId: string,
+    frame: object,
+  ): Promise<void> {
+    const local = this.relayPeers.get(id)?.get(targetPeerId);
+    if (local) {
+      this.safeSend(local, frame);
+      return;
+    }
+    await this.valkey!.p2pPublish({
+      origin: this.origin,
+      sessionId: id,
+      targetPeerId,
+      frame,
+    });
+  }
+
+  private ttlMs(): number {
+    return this.config.get().p2p.sessionTtlMinutes * 60_000;
+  }
 
   create(
     ip: string,
@@ -159,6 +328,7 @@ export class P2PSessionService implements OnApplicationShutdown {
   }
 
   sweepStale(): number {
+    if (this.relayEnabled()) return 0;
     let count = 0;
     const cutoff =
       Date.now() - this.config.get().p2p.sessionTtlMinutes * 60_000;
