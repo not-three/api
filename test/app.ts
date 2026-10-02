@@ -1,10 +1,15 @@
 import { Test } from "@nestjs/testing";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "src/app.module";
+import { ValkeyService } from "src/services/valkey.service";
+import { ConfigService } from "src/services/config.service";
+import Valkey from "iovalkey";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
 export interface TestApp {
   app: NestExpressApplication;
   server: any;
+  listen(): Promise<number>;
   close(): Promise<void>;
 }
 
@@ -21,6 +26,7 @@ const DEFAULT_ENV: Record<string, string> = {
 
 export async function createTestApp(
   env: Record<string, string> = {},
+  overrides: { valkeyClientFactory?: () => Valkey; swagger?: boolean } = {},
 ): Promise<TestApp> {
   const applied = { ...DEFAULT_ENV, ...env };
   const previous: Record<string, string | undefined> = {};
@@ -29,9 +35,36 @@ export async function createTestApp(
     process.env[key] = value;
   }
 
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  });
+  if (overrides.valkeyClientFactory) {
+    const factory = overrides.valkeyClientFactory;
+    class AppValkeyService extends ValkeyService {
+      private readonly appClient = factory();
+      async onModuleInit(): Promise<void> {
+        await this.appClient.ping();
+      }
+      isEnabled(): boolean {
+        return true;
+      }
+      getClient(): Valkey {
+        return this.appClient;
+      }
+      protected createClient(): Valkey {
+        return factory();
+      }
+      async onApplicationShutdown(): Promise<void> {
+        await super.onApplicationShutdown();
+        await this.appClient.quit();
+      }
+    }
+    builder.overrideProvider(ValkeyService).useFactory({
+      factory: (config: ConfigService) => new AppValkeyService(config),
+      inject: [ConfigService],
+    });
+  }
+  const moduleRef = await builder.compile();
 
   // Mirrors main.ts: rawBody for the text endpoints, same parser limits.
   const app = moduleRef.createNestApplication<NestExpressApplication>({
@@ -40,11 +73,21 @@ export async function createTestApp(
   });
   app.useBodyParser("json", { limit: "10mb" });
   app.useBodyParser("text", { limit: "10mb" });
+  if (overrides.swagger) {
+    const config = new DocumentBuilder().build();
+    SwaggerModule.setup("swagger", app, () =>
+      SwaggerModule.createDocument(app, config),
+    );
+  }
   await app.init();
 
   return {
     app,
     server: app.getHttpServer(),
+    async listen() {
+      await app.listen(0);
+      return (app.getHttpServer().address() as { port: number }).port;
+    },
     async close() {
       await app.close();
       for (const [key, value] of Object.entries(previous)) {
