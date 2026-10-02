@@ -9,7 +9,7 @@ import request from "supertest";
 const RedisMock = require("ioredis-mock");
 
 /**
- * API P2P conformance checklist (OMO job 2 and its archived API plan).
+ * API P2P conformance checklist.
  * Each entry names the proving Jest test; paths are relative to this repo.
  *
  * Config and public metadata
@@ -60,7 +60,7 @@ const RedisMock = require("ioredis-mock");
  *     message cap before the bounded parser cap" tests 1024/1500/3000 bytes.
  * [x] 30-second unref'd ping/pong heartbeat and terminate+cleanup on missed pong:
  *     "terminates a peer that misses heartbeat pongs and keeps responsive peers".
- * [x] The archived plan's manual create/join/signal/leave smoke is exercised
+ * [x] The manual create/join/signal/leave smoke is exercised
  *     against a bound HTTP server with real WS clients by "creates transfer,
  *     joins, relays opaque signals, and permits receiver rejoin".
  *
