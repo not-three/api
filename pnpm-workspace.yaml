@@ -1,5 +1,6 @@
 allowBuilds:
   '@nestjs/core': true
+  '@parcel/watcher': false
   '@scarf/scarf': true
   sqlite3: true
   unrs-resolver: true
