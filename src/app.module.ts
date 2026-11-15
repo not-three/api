@@ -19,7 +19,7 @@ import { ValkeyService } from "./services/valkey.service";
 import { P2PSessionService } from "./services/p2p-session.service";
 import { P2PGatewayService } from "./services/p2p-gateway.service";
 
-function cacheFactory(): CacheOptions {
+export function cacheFactory(): CacheOptions {
   const cfg = new BaseConfig().valkey;
   if (!cfg.enabled) return {};
   const client = new Valkey({
